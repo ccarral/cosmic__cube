@@ -1,0 +1,159 @@
+@import "fonts";
+@import "colors";
+
+.background {
+  background: $background;
+}
+
+div{
+  font-family: "Iosevka", arial;
+}
+
+
+li{
+    a{
+        color: $li-a-base;
+        text-decoration: none;
+        padding-top: 1vh;
+        padding-bottom: 1vh;
+        font-size: 21px;
+        position: relative;
+    }
+}
+
+li:hover{
+    a{
+        text-decoration: none;
+        color: $li-a-hover;
+    }
+}
+
+a {
+  font-weight: 700;
+  text-decoration: none;
+  color: inherit;
+}
+
+
+.content {
+  font-size: 20px;
+  text-justify: auto;
+  letter-spacing: 0.5px;
+  font-family: "Iosevka", arial;
+  color: $content-font-color;
+}
+
+.content p{
+    line-height: 175%;
+    font-family: "Iosevka", arial;
+}
+
+@media only screen and (min-width: 768px) {
+    .centerColumn {
+      margin-left: auto;
+      margin-right: auto;
+      width: 50vw;
+    }
+}
+
+centerColumn {
+      margin-left: auto;
+      margin-right: auto;
+      width: 90vw;
+}
+
+@media only screen and (max-width: 400px){
+     .mobile p{
+        line-height: 200%;
+        letter-spacing: 1px;
+     }
+}
+
+h1.main-title {
+  font-family: "Source Code Pro", "Work Sans";
+  font-size: 50px;
+  color: rgba(41, 41, 41, 1);
+  text-decoration: underline;
+  color: $h1-main;
+  text-decoration-color: $h1-decoration;
+}
+
+h2 {
+  font-family: "Source Code Pro", "Work Sans";
+  font-size: 30px;
+  /* color: #5b5b5b; */
+  /* color: #37474f; */
+  color: $h2-main;
+}
+
+code {
+    font-size: 18px;
+    font-family:"Iosevka"
+}
+
+table{
+    border-collapse: collapse;
+}
+th,td{
+    padding-top: 0.4em;
+    padding-bottom: 0.4em;
+    padding-left: 0.4em;
+    padding-right: 0.4em;
+    border: 1px solid #ddd;
+}
+
+a[target] svg {
+  display: none !important;
+}
+
+a[target] span { 
+  display: none !important
+} 
+
+th{
+    background: #f0f0f0;
+}
+
+div.lang {
+    p{
+        a{
+            text-align: right;
+            font-size: 20px;
+            color: $lang-button;
+            display: block;
+            text-decoration: none;
+        }
+    }
+}
+
+#description {
+    padding-top: 3vh;
+}
+
+.home-img {
+    max-width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.home ul {
+    list-style-type: "  ";
+    font-family: "Iosevka", arial;
+}
+
+.home li {
+    color: $li-a-base;
+    text-decoration: none;
+    padding-top: 1vh;
+    padding-bottom: 1vh;
+    font-family: "Iosevka", arial;
+}
+
+.home li:hover {
+    text-decoration: none;
+    font-family: "Iosevka", arial;
+}
+
+#landing-img {
+    border-radius: 10px;
+}

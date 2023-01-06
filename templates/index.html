@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block main_content %}
+    <div class="centerColumn home">
+        <h1 class="main-title">{{ config.title }}</h1>
+        <p id="description">
+            {{ section.content | safe}}
+        </p>
+        <img id="landing-img" src={{ get_url(path=config.extra.default_img) }} class="home-img" />
+    </div>
+{% endblock main_content %}

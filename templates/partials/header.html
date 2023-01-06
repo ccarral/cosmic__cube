@@ -1,0 +1,31 @@
+{% block header %}
+<head>
+
+    <title>
+        {{ config.title  | default(value="Cosmic Cube")}}
+    </title>
+
+    {% if config.extra.favicon %}
+        <link rel="icon" type="image/png" href={{ config.extra.favicon }} />
+    {% endif %}
+
+    {# Analytics #}
+    {% if config.extra.analytics.enabled and config.extra.analytics.goatcounter_user %}
+        {% set user = config.extra.analytics.goatcounter_user %}
+        {% set host = config.extra.analytics.goatcounter_host | default(value="goatcounter.com") %}
+        <script data-goatcounter="https://{{ user }}.{{ host }}/count" async src="{{ get_url(path="js/count.js") }}"></script>
+        <noscript>
+            {# EasyList blocks '.com/count?', so we have to use '.com//count' #}
+            <img src="https://{{ user }}.{{ host }}//count?p={{ current_path }}&t={{ page.title | default(value=config.title) }}">
+        </noscript>
+    {% endif %}
+
+    {% block styles %}
+    <link rel="stylesheet" type="text/css" media="screen" href={{ get_url(path="main.css") }} />
+    {% endblock styles %}
+
+    {% block meta %}
+        {% include "partials/meta.html" %}
+    {% endblock meta %}
+</head>
+{% endblock header %}
