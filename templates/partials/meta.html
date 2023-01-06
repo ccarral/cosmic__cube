@@ -19,11 +19,11 @@
   <meta name="twitter:site" content={{ config.extra.twitter }}>
   <meta property="og:type" content="article">
   <meta property="og:title" content={{ config.title }}>
-  <meta property="og:description" content="Cosas que sólo me interesan a mí.">
+  <meta property="og:description" content={{ config.description }}>
   <meta property="og:image" content={{ get_url(path=meta_img) }}>
   <meta property="og:url" content={{ config.base_url }}>
   <meta property="og:site_name" content={{ config.title }}>
   <meta itemprop="name" content="">
-  <meta itemprop="description" content={{ config.description | safe }}>
+  <meta itemprop="description" content={{ config.description }}>
   <meta itemprop="image" content={{ get_url(path=meta_img) }}>
 {% endblock meta %}
