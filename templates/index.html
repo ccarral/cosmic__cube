@@ -2,6 +2,12 @@
 {% block main_content %}
     <div class="centerColumn home">
         {% include "partials/banner.html" %}
-        <img id="landing-img" src={{ get_url(path=config.extra.default_img) }} class="home-img" />
+        {% for section in section.subsections %}
+            {% set section =  get_section(path=section) %}
+            <p><a href="{{ section.path }}">{{ section.title }}</a></p>
+        {% endfor %}
+        <div id="landing-img-container" >
+            <img src={{ get_url(path=config.extra.default_img) }} />
+        </div>
     </div>
 {% endblock main_content %}
