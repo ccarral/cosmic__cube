@@ -1,6 +1,8 @@
 @import "fonts";
 @import "colors";
 
+$ascii-art-font-size: 15px;
+
 .background {
   background: $background;
 }
@@ -127,7 +129,17 @@ div.lang {
 }
 
 #description {
-    padding-top: 3vh;
+    // padding-top: 3vh;
+}
+
+.ascii-art{
+    font-size: $ascii-art-font-size;
+    line-height: $ascii-art-font-size;
+    letter-spacing: 0px;
+}
+
+.ascii-banner{
+    color: $banner-color;
 }
 
 .home-img {
