@@ -1,84 +1,9 @@
-<html>
-    <div class="centerColumn content textblock mobile post">
-        <!-- <TopNavigation></TopNavigation> -->
-        {{ page.content | safe }}
-        <div id="bottom">
-            <!-- <router-link  v-if="!$frontmatter.lang || $frontmatter.lang === -->
-            <!-- 'es'" to="/"> -->
-                <!-- <div>[inicio]</div> -->
-            <!-- </router-link> -->
-            <!-- <router-link  v-else-if="$frontmatter.lang === -->
-            <!-- 'en'" to="/en/"> -->
-                <!-- <div>[home]</div> -->
-            <!-- </router-link> -->
-        </div>
-    </div>
-</html>
+{% extends "base.html" %}
+{% block main_content %}
+<div class="center-column content textblock mobile post">
+    <h1 class="main-title">{{ page.title }}</h1>
+    {{ page.content | safe }}
+    {{ page.assets }}
+</div>
+{% endblock main_content %}
 
-<!-- <script> -->
-<!-- import TopNavigation from "../components/TopNavigation.vue"; -->
-<!-- export default { -->
-    <!-- components: { TopNavigation }, -->
-<!-- }; -->
-<!-- </script> -->
-
-<style>
-.date {
-    text-align: right;
-    font-size: 20px;
-    text-justify: auto;
-    font-family: "Radley", arial;
-    color: rgba(41, 41, 41, 1);
-}
-.post img {
-    margin-top: 2em;
-    margin-bottom: 2em;
-    width: 100%;
-    height: auto;
-    vertical-align: middle;
-}
-
-.post p {
-    font-size: 19px;
-    /* text-align: justify; */
-    text-justify: auto;
-    font-family: "Iosevka", arial;
-    color: rgba(41, 41, 41, 1);
-}
-
-#bottom {
-    padding-top: 4em;
-    padding-bottom: 3em;
-    margin-left: auto;
-    margin-right: auto;
-    width: 10vw;
-    color: #6ebf8b;
-    text-decoration: none;
-    font-family: "Iosevka", arial;
-}
-
-.textblock p a {
-    text-decoration: underline;
-    color: #d82148;
-}
-
-.indent {
-    list-style: none;
-}
-
-.post ol li {
-    padding-bottom: 1em;
-}
-
-.textblock ul {
-    text-decoration: none;
-    list-style-type: "+ ";
-}
-
-.textblock li {
-    margin-top: 1em;
-}
-code{
-  background:#F0F0F0;
-}
-</style>

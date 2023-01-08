@@ -1,0 +1,9 @@
+<div id="nav-container" class="center-column">
+    <a href="/" class="nav-element">home</a> | 
+    {% set projects =  get_section(path="projects/_index.md") %}
+    <a href="{{ projects.path }}" class="nav-element">{{ projects.title }}</a> |
+    {% set blog =  get_section(path="blog/_index.md") %}
+    <a href="{{ blog.path }}" class="nav-element">{{ blog.title }}</a> |
+    <a href="{{ blog.path }}" class="nav-accent">en</a> 
+</div>
+

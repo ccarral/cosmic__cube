@@ -3,14 +3,12 @@
 {% include "partials/header.html" %}
 <body class="background">
     <div class="content">
-        {# % include "partials/nav.html" %# }
-
-        {# Post page is the default #}
+        <div class="center-column" style="text-align:center">
+            {% include "partials/nav.html" %}
+        </div>
         {% block main_content %}
             Nada por aquí...
         {% endblock main_content %}
     </div>
 </body>
-
 </html>
-<style></style>
