@@ -1,0 +1,40 @@
+$ascii-art-font-size: 14px;
+
+.home{
+    text-align: justify;
+}
+.banner-container{
+    text-align: center;
+}
+
+.ascii-banner{
+    color: $banner-color;
+}
+
+%ascii{
+    letter-spacing: 0px;
+    font-family:"gohu", mono;
+}
+
+.ascii-art{
+    font-size: $ascii-art-font-size;
+    line-height: $ascii-art-font-size;
+    @extend %ascii;
+}
+
+@media only screen and (max-width: 400px){
+    .ascii-art{
+        font-size: $ascii-art-font-size - 6;
+        line-height: $ascii-art-font-size - 6;
+        @extend %ascii;
+    }
+}
+
+#landing-img-container{
+    text-align: center;
+    img {
+        max-width: 70%;
+        margin-left: auto;
+        margin-right: auto;
+    }
+}
