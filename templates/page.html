@@ -1,9 +1,11 @@
 {% extends "base.html" %}
 {% block main_content %}
-<div class="center-column content textblock mobile post">
+<article id="post" class="center-column content">
     <h1 class="main-title">{{ page.title }}</h1>
     {{ page.content | safe }}
-    {{ page.assets }}
-</div>
+</article>
+<script>
+$( "img" ).wrap( "<div id='post-img-container'></div>" );
+</script>
 {% endblock main_content %}
 

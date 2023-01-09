@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 {% block main_content %}
-    <div class="center-column home">
+    <div id="landing-content" class="center-column home">
         {% include "partials/banner.html" %}
         {{ section.content | safe}}
-        <div id="landing-img-container">
-            <img src={{ get_url(path=config.extra.default_img) }} />
-        </div>
     </div>
+    <script>
+    $( "img" ).wrap( "<div id='landing-img-container'></div>" );
+    </script>
 {% endblock main_content %}

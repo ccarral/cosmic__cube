@@ -24,6 +24,9 @@
     <link rel="stylesheet" type="text/css" media="screen" href={{ get_url(path="main.css") }} />
     {% endblock styles %}
 
+    {% block scripts%}
+    <script src="https://code.jquery.com/jquery-3.5.0.js"></script>
+    {% endblock scripts%}
     {% block meta %}
         {% include "partials/meta.html" %}
     {% endblock meta %}

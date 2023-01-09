@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block main_content %}
-<div class="center-column content post-list">
-    <h1 class="inverted">{{section.title}}</h1>
+<div id="post-list" class="center-column content">
+    <h2>{{section.title}}</h1>
     {% for page in section.pages %}
     <p><a href="{{ page.path }}">{{ page.title }}</a></p>
     {% endfor %}

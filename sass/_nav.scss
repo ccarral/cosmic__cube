@@ -2,6 +2,9 @@
     font-family: "gohu";
     font-size: 15px;
     color: $nav-negative;
+    a{
+        text-decoration: none;
+    }
 }
 .nav-element{
     color: $nav-color;
