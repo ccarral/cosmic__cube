@@ -1,12 +1,19 @@
 {% block header %}
 <head>
 
+    {% set current_path = current_path | default(value="/") %}
+    {% if current_path == "/" %}
     <title>
-        {{ config.title }}
+        {{ config.title | default(value="Home") }}
     </title>
+    {% else %}
+    <title>
+        {{ page.title | default(value=section.title) | default(value=config.title) | default(value="Post") }}
+    </title>
+    {% endif %}
 
     {% if config.extra.favicon %}
-        <link rel="icon" type="image/png" href={{ config.extra.favicon }} />
+    <link rel="icon" type="image/png" href="{{ config.extra.favicon }}" />
     {% endif %}
 
     {% block styles %}
