@@ -12,9 +12,7 @@
     </title>
     {% endif %}
 
-    {% if config.extra.favicon %}
-    <link rel="icon" type="image/png" href="{{ config.extra.favicon }}" />
-    {% endif %}
+    <link rel="icon" type="image/png" href="favicon.ico" />
 
     {% block styles %}
     <link rel="stylesheet" type="text/css" media="screen" href={{ get_url(path="main.css") }} />
