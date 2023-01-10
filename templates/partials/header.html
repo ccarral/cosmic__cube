@@ -9,24 +9,18 @@
         <link rel="icon" type="image/png" href={{ config.extra.favicon }} />
     {% endif %}
 
-    {# Analytics #}
-    {% if config.extra.analytics.enabled and config.extra.analytics.goatcounter_user %}
-        {% set user = config.extra.analytics.goatcounter_user %}
-        {% set host = config.extra.analytics.goatcounter_host | default(value="goatcounter.com") %}
-        <script data-goatcounter="https://{{ user }}.{{ host }}/count" async src="{{ get_url(path="js/count.js") }}"></script>
-        <noscript>
-            {# EasyList blocks '.com/count?', so we have to use '.com//count' #}
-            <img src="https://{{ user }}.{{ host }}//count?p={{ current_path }}&t={{ page.title | default(value=config.title) }}">
-        </noscript>
-    {% endif %}
-
     {% block styles %}
     <link rel="stylesheet" type="text/css" media="screen" href={{ get_url(path="main.css") }} />
     {% endblock styles %}
 
-    {% block scripts%}
+    {% block scripts %}
     <script src="https://code.jquery.com/jquery-3.5.0.js"></script>
-    {% endblock scripts%}
+    {% if config.extra.analytics.enabled and config.extra.analytics.goatcounter_user %}
+        {% set user = config.extra.analytics.goatcounter_user %}
+        <script data-goatcounter="https://{{ user }}.goatcounter.com/count" 
+            async src="//gc.zgo.at/count.js"></script>
+    {% endif %}
+    {% endblock scripts %}
     {% block meta %}
         {% include "partials/meta.html" %}
     {% endblock meta %}

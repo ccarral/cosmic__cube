@@ -16,8 +16,10 @@ default_language = "es"
 title = "Cosmic Cube"
 description = "Cosas que solo me interesan a mi"
 
-# theme = "apollo"
-
 [extra]
 twitter = "@0xC4C4"
 default_img = "images/setup.jpg"
+
+[extra.analytics]
+enabled=true
+goatcounter_user = "cosmiccube"
