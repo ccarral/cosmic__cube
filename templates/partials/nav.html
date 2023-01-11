@@ -1,9 +1,28 @@
 <div id="nav-container" class="center-column">
-    <a href="/" class="nav-element">home</a> | 
-    {% set projects =  get_section(path="projects/_index.md") %}
-    <a href="{{ projects.path }}" class="nav-element">{{ projects.title }}</a> |
-    {% set blog =  get_section(path="blog/_index.md") %}
-    <a href="{{ blog.path }}" class="nav-element">{{ blog.title }}</a> |
-    <a href="{{ blog.path }}" class="nav-accent">en</a> 
+    {% set default_home = get_section(path="_index.md") %}
+    {% set home = default_home %}
+    {% for h in default_home.translations %}
+        {% if h.lang == lang %}
+            {% set home = get_section(path=h.path) %}
+            <a href="{{ home.permalink }}" class="nav-element">{{ home.title }}</a> | 
+            {% break %}
+        {% endif %}
+    {% endfor %}
+
+
+    {% for s in home.subsections %}
+        {% set subsection = get_section(path=s) %}
+        {% for s_trans in subsection.translations %}
+            {% if s_trans.lang == lang%}
+                <a href="{{ s_trans.permalink }}" class="nav-element">{{ s_trans.title }}</a> | 
+            {% endif %}
+        {% endfor %}
+    {% endfor %}
+
+    {% for t in home.translations%}
+        {% if t.lang != lang %}
+        <a href="{{ t.permalink }}" class="nav-accent">{{t.lang}}</a> 
+        {% endif %}
+    {% endfor %}
 </div>
 
