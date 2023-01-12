@@ -1,6 +1,7 @@
 <div class="banner-container">
     <pre class="ascii-art ascii-banner">
-    {% set data = load_data(path="static/banner.txt") %}
+    {% set banner_path = config.extra.banner | default(value="banner.txt") %}
+    {% set data = load_data(path=banner_path) %}
 {{ data }}
     </pre>
 </div>
