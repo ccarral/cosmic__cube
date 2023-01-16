@@ -1,0 +1,11 @@
+name = "cosmic__cube"
+description = "Zola theme for my blog"
+license = "GPL"
+min_version = "0.16.0"
+
+[author]
+name = "Carlos Carral"
+homepage = "https://ccarral.github.io"
+
+[extra]
+banner = "static/banner.txt"
