@@ -2,6 +2,7 @@
 {% block main_content %}
 <article id="post" class="center-column content">
     <h1 class="main-title">{{ page.title }}</h1>
+    <p id="date">{{ page.date }}</p>
     {{ page.content | safe }}
 </article>
 <script>
