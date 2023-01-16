@@ -1,0 +1,23 @@
+{% macro nav() %}
+
+{% set home_path = "_index.md"%}
+{%- if lang != config.default_language %}
+    {% set home_path = "_index." ~ lang ~".md"%}
+{% endif -%}
+
+{% set home = get_section(path=home_path) %}
+
+<div id="nav-container" class="center-column">
+    <a href="{{ home.permalink }}" class="nav-element">{{ home.title }}</a> | 
+    {%- for s in home.subsections %}
+        {% set subsection = get_section(path=s) %}
+        <a href="{{ subsection.permalink }}" class="nav-element">{{ subsection.title }}</a> | 
+    {% endfor -%}
+
+    {%- for t in home.translations%}
+        {%- if t.lang != home.lang %}
+        <a href="{{ t.permalink }}" class="nav-accent">{{t.lang}} </a> 
+        {% endif -%}
+    {% endfor -%}
+</div>
+{% endmacro nav %}
