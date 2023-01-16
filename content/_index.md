@@ -1,7 +1,7 @@
 +++
-title = "Cosmic Cube" 
+title = "inicio"
 +++
+Este es el theme de mi blog. Y esta es la página de inicio.
+Este es mi perro.
 
-En esta página escribo sobre computadoras, libros y otras cosas que me
-interesan.
-Espero que encuentres lo que estabas buscando.
+![tintan](images/tintan.jpg)
