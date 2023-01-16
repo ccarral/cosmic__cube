@@ -1,12 +1,15 @@
-$background: #000000;
+$light-green: #93ffd7;
+$black: #000000;
+$red: #f33d41;
+
+$background: $black;
 $h1-main: #ffffff;
 $banner-color: #ffffff;
-$h1-decoration: #6EBF8B;
+$h1-decoration: $light-green;
 $h2-main :#455464;
-$lang-button: #9f83ff;
 $li-a-base: #202020;
 $li-a-hover: #D82148;
 $content-font-color: #d4d4d4;
-$nav-color: #93ffd7;
-$nav-accent: #f33d41;
+$nav-color: $light-green;
+$nav-accent: $red;
 $nav-negative: #FFFFFF;

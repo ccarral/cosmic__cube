@@ -14,27 +14,9 @@ div{
   font-family: "Iosevka", arial;
 }
 
-li{
-    a{
-        color: $li-a-base;
-        text-decoration: none;
-        padding-top: 1vh;
-        padding-bottom: 1vh;
-        font-size: 21px;
-        position: relative;
-    }
-}
-
-li:hover{
-    a{
-        text-decoration: none;
-        color: $li-a-hover;
-    }
-}
-
 a {
   font-weight: 700;
-  color: inherit;
+  color: $nav-accent;
 }
 
 
@@ -44,7 +26,7 @@ a {
   font-family: "Iosevka", arial;
   color: $content-font-color;
   p {
-    font-size: 18px;
+    font-size: 16px;
     line-height: 175%;
     font-family: "Iosevka", arial;
   }
@@ -66,8 +48,6 @@ a {
 }
 
 @media only screen and (max-width: 400px){
-    .mobile p{
-    }
     .center-column {
           margin-left: auto;
           margin-right: auto;
@@ -83,7 +63,7 @@ a {
 }
 
 code {
-    font-size: 18px;
+    font-size: inherit;
     font-family:"Iosevka"
 }
 
@@ -108,16 +88,4 @@ a[target] span {
 
 th{
     background: #f0f0f0;
-}
-
-div.lang {
-    p{
-        a{
-            text-align: right;
-            font-size: 20px;
-            color: $lang-button;
-            display: block;
-            text-decoration: none;
-        }
-    }
 }
