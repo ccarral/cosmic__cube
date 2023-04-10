@@ -4,6 +4,7 @@
     <h1 class="main-title">{{ page.title }}</h1>
     <p id="date">{{ page.date }}</p>
     {{ page.content | safe }}
+    {{ macros::back() }}
 </article>
 <script>
 $( "img" ).wrap( "<div id='post-img-container'></div>" );

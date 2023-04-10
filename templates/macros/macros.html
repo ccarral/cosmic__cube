@@ -21,3 +21,16 @@
     {% endfor -%}
 </div>
 {% endmacro nav %}
+
+{% macro back() %}
+<div class="center-column" style="text-align:center">
+    {%- if lang == "es" %}
+        {% set back_str = "atrás" %}
+    {% else -%}
+        {% set back_str = "back" %}
+    {% endif -%}
+    {% set parent_path = page.ancestors | last %}
+    {% set parent = get_section(path=parent_path)%}
+    <a class="center-column" href="{{ parent.permalink }}">[{{ back_str  }}]</a>
+</div>
+{% endmacro back%}
