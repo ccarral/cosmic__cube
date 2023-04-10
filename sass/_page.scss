@@ -2,6 +2,12 @@
     width: 70vw;
 }
 
+@media only screen and (max-width: 400px){
+    #post {
+        width: 90vw;
+    }
+}
+
 #post-img-container{
     text-align: center;
     img {
