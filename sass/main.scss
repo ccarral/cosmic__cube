@@ -10,10 +10,6 @@
   background: $background;
 }
 
-div{
-  font-family: "Iosevka", arial;
-}
-
 a {
   font-weight: 700;
   color: $nav-accent;
@@ -23,12 +19,12 @@ a {
 .content {
   text-justify: auto;
   letter-spacing: 0.5px;
-  font-family: "Iosevka", arial;
+  font-family: "gohu", arial;
   color: $content-font-color;
   p {
     font-size: 16px;
     line-height: 175%;
-    font-family: "Iosevka", arial;
+    font-family: "gohu", arial;
   }
 }
 
@@ -64,7 +60,7 @@ a {
 
 code {
     font-size: inherit;
-    font-family:"Iosevka"
+    font-family:"gohu", "mono",
 }
 
 table{
