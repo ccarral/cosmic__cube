@@ -2,20 +2,32 @@
     width: 70vw;
 }
 
-@media only screen and (max-width: 400px){
-    #post {
-        width: 90vw;
-    }
-}
 
 #post-img-container{
     text-align: center;
     img {
-        max-width: 70%;
         margin-left: auto;
         margin-right: auto;
         padding-top: 5vh;
         padding-bottom: 5vh;
+    }
+}
+
+@media only screen and (max-width: 768px){
+    #post {
+        width: 90vw;
+    }
+    #post-img-container{
+        img{
+            width: 100%;
+        }
+    }
+}
+@media only screen and (min-width: 769px){
+    #post-img-container{
+        img{
+            width: 70%;
+        }
     }
 }
 
