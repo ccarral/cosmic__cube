@@ -2,7 +2,7 @@
 title = "home"
 +++
 
-![setup](setup.jpg)
+![Tintan and me](/images/tintan_y_yo.jpg)
 
 Carlos' personal site. Here I talk about books, computers
 and other stuff.
@@ -11,7 +11,6 @@ and other stuff.
 
 Computer engineer (UAEMex, class of 23).
 
-![Tintan and me](tintan_y_yo.jpg)
 
 I dedicate my time to programming, reading and watching movies from time to time.
 Into kernel development and low level stuff. Everything computer related, really.
