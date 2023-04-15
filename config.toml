@@ -22,7 +22,7 @@ highlight_theme = "visual-studio-dark"
 
 [extra]
 twitter = "@0xC4C4"
-default_img = "images/setup.jpg"
+default_img = "images/tintan_y_yo.jpg"
 
 [extra.analytics]
 enabled=true
