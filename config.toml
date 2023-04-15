@@ -19,6 +19,8 @@ description = "Cosas que solo me interesan a mi"
 highlight_code = true 
 highlight_theme = "visual-studio-dark"
 
+[slugify]
+paths = "off"
 
 [extra]
 twitter = "@0xC4C4"
