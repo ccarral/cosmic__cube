@@ -15,16 +15,17 @@ a {
   color: $nav-accent;
 }
 
+.content-font-style{
+    font-family: "unifont", mono;
+    font-size: 16px;
+}
 
 .content {
+  @extend .content-font-style;
   text-justify: auto;
-  letter-spacing: 0.5px;
-  font-family: "gohu", arial;
   color: $content-font-color;
   p {
-    font-size: 16px;
     line-height: 175%;
-    font-family: "gohu", arial;
   }
 }
 
@@ -51,8 +52,8 @@ a {
 }
 
 code {
+    @extend .content-font-style;
     font-size: inherit;
-    font-family:"gohu", "mono",
 }
 
 table{
