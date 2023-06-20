@@ -9,9 +9,7 @@ computadoras y otras cosas.
 
 ## Acerca de mí
 
-Estudiante de ingeniería en computación por la Universidad Autónoma del Estado de 
-México.
-
+Ingeniero en computación (UAEMex 23). 
 
 Dedico mi tiempo a programar, leer y ver películas. Me interesa la programación de bajo nivel y 
 todo lo que tenga que ver con computadoras.
