@@ -1,0 +1,84 @@
+<!doctype html><html><head><title>
+        Escribiendo un módulo de kernel de linux desde cero con rust
+    </title><link href=https://ccarral.github.io/favicon.ico rel=icon type=image/png><link href=https://ccarral.github.io/main.css media=screen rel=stylesheet><script src=https://code.jquery.com/jquery-3.5.0.js></script><script async data-goatcounter=https://cosmiccube.goatcounter.com/count src=//gc.zgo.at/count.js></script><meta charset=UTF-8><meta content="IE=edge" http-equiv=X-UA-Compatible><meta content="width=device-width,initial-scale=1.0" name=viewport><meta content="Cosas que solo me interesan a mi" name=description><meta content=https://ccarral.github.io/projects/hello_world_kernel_module/dmesg_cap_es.png name=image><meta content="Escribiendo un módulo de kernel de linux desde cero con rust" name=twitter:title><meta content="Cosas que solo me interesan a mi" name=twitter:description><meta content=summary_large_image name=twitter:card><meta content=https://ccarral.github.io/projects/hello_world_kernel_module/dmesg_cap_es.png name=twitter:image><meta content=https://ccarral.github.io name=twitter:url><meta content=@0xC4C4 name=twitter:site><meta content=article property=og:type><meta content="Escribiendo un módulo de kernel de linux desde cero con rust" property=og:title><meta content="Cosas que solo me interesan a mi" property=og:description><meta content=https://ccarral.github.io/projects/hello_world_kernel_module/dmesg_cap_es.png property=og:image><meta content=https://ccarral.github.io property=og:url><meta content="Escribiendo un módulo de kernel de linux desde cero con rust" property=og:site_name><meta itemprop=name><meta content="Cosas que solo me interesan a mi" itemprop=description><meta content=https://ccarral.github.io/projects/hello_world_kernel_module/dmesg_cap_es.png itemprop=image><body class=background><div class=content><div class=center-column style=text-align:center><div class=center-column id=nav-container><a class=nav-element href=https://ccarral.github.io/>inicio</a> | <a class=nav-element href=https://ccarral.github.io/blog/>blog</a> | <a class=nav-element href=https://ccarral.github.io/projects/>proyectos</a> | <a class=nav-accent href=https://ccarral.github.io/en/>en </a></div></div><article class="center-column content" id=post><h1 class=main-title>Escribiendo un módulo de kernel de linux desde cero con rust</h1><p id=date>2021-04-27<p>Históricamente, si queremos escribir un módulo de kernel para linux, nuestra única opción es lidiar con las librerías de C dispuestas por el kernel para esos motivos. Sin embargo, un nuevo <a href=https://lkml.org/lkml/2021/4/14/1023>RFC</a> propone añadir soporte para rust dentro del kernel.<h2 id=instalando-nuestras-herramientas>Instalando nuestras herramientas</h2><p>Si tienes un entorno de desarrollo instalado para rust en tu equipo, entonces muy probablemente también cuentas con <a href=https://rustup.rs/>rustup</a> instalado, por lo que no profundizaré en ese aspecto. También necesitarás el conjunto de herramientas de <a href=https://llvm.org/>llvm</a> disponible para tu versión de linux.<p>Primero, necesitamos el código fuente de <a href=https://github.com/Rust-for-Linux/linux>rust-for-linux</a>. Es una descarga muy pesada a través de git y ssh, por lo que recomiendo descargarlo en un zip. Extraemos el código en un directorio de nuestra elección. El siguiente paso es configurar las opciones para compilar el kernel. La manera más sencilla de hacerlo es a través de<pre style=background:#1e1e1e;color:#dcdcdc><code><span>$ make LLVM=1 menuconfig
+</span></code></pre><p>y añadir la opción de soporte para rust. El proceso está documentado de manera extensiva en <code>Documentation/rust/quick-start.rst</code> En el día en el que ésta publicación fue escrita, la versión <em>nightly</em> de rust es necesaria para activar ciertas funciones experimentales necesarias para la compilación. También necesitamos la librería estándar para compilar <code>core</code> y <code>alloc</code>.<pre style=background:#1e1e1e;color:#dcdcdc><code><span>$ rustup default nightly-2021-02-20
+</span><span>$ rustup component add rust-src
+</span></code></pre><h2 id=escribiendo-el-codigo>Escribiendo el código</h2><p>El proyecto <em>rust-for-linux</em> provee de un conjunto de herramientas para escribir un módulo de kernel. Si estás familiarizado con el código descrito para un módulo de <code>hello world</code> en <em>Linux Device Drivers</em>, entonces el siguiente código será muy familiar para ti.<p>Comenzamos en un directorio de trabajo separado con el archivo <code>hola_mundo.rs</code>:<pre class=language-rust data-lang=rust style=background:#1e1e1e;color:#dcdcdc><code class=language-rust data-lang=rust><span style=color:#608b4e>//! Módulo de ejemplo 'hola mundo'
+</span><span>
+</span><span>#![no_std]
+</span><span>#![feature(allocator_api, global_asm)]
+</span><span>
+</span><span style=color:#569cd6>use </span><span>kernel::prelude::*;
+</span><span>
+</span><span>module! {
+</span><span>    </span><span style=color:#569cd6>type</span><span>: HolaMundo,
+</span><span>    name: </span><span style=color:#569cd6>b</span><span style=color:#d69d85>"hola_mundo"</span><span>,
+</span><span>    author: </span><span style=color:#569cd6>b</span><span style=color:#d69d85>"Carlos Carral"</span><span>,
+</span><span>    description: </span><span style=color:#569cd6>b</span><span style=color:#d69d85>"Modulo de kernel hola_mundo"</span><span>,
+</span><span>    license: </span><span style=color:#569cd6>b</span><span style=color:#d69d85>"GPL v2"</span><span>,
+</span><span>    params: {
+</span><span>    },
+</span><span>}
+</span><span>
+</span><span style=color:#569cd6>struct </span><span>HolaMundo;
+</span><span>
+</span><span style=color:#608b4e>// El módulo implementa la interfaz 'KernelModule', 
+</span><span style=color:#608b4e>// la cual necesita una función de inicialización llamada init()
+</span><span style=color:#569cd6>impl </span><span>KernelModule </span><span style=color:#569cd6>for </span><span>HolaMundo{
+</span><span>    </span><span style=color:#569cd6>fn </span><span>init() -> KernelResult<</span><span style=color:#569cd6>Self</span><span>> {
+</span><span>        pr_info!(</span><span style=color:#d69d85>"Hola mundo, desde el kernel"</span><span>);
+</span><span>        Ok(HolaMundo{})
+</span><span>    }
+</span><span>}
+</span><span>
+</span><span style=color:#608b4e>// También es necesaria implementar la interfaz Drop, 
+</span><span style=color:#608b4e>// pues será invocada cuando el módulo sea retirado del kernel.
+</span><span style=color:#569cd6>impl </span><span>Drop </span><span style=color:#569cd6>for </span><span>HolaMundo{
+</span><span>    </span><span style=color:#569cd6>fn </span><span>drop(</span><span style=color:#569cd6>&mut </span><span>self) {
+</span><span>        pr_info!(</span><span style=color:#d69d85>"Adiós!"</span><span>);
+</span><span>    }
+</span><span>}
+</span></code></pre><p>Hasta ahora, el código es casi el mismo que el que está en <code>samples/rust/rust_minimal.rs</code>.<p>A continuación sigue el makefile para nuestro módulo.<pre class=language-Makefile data-lang=Makefile style=background:#1e1e1e;color:#dcdcdc><code class=language-Makefile data-lang=Makefile><span>obj-m += </span><span style=background:#282828;color:#d69d85>hola_mundo.o</span><span>
+</span><span>
+</span><span style=color:#608b4e># Variable simplemente expandida ":="
+</span><span>KERNELDIR :=</span><span style=background:#282828;color:#d69d85>/directorio/de/rust-for-linux/linux</span><span>
+</span><span>
+</span><span style=color:#608b4e># Se expande a nuestro directorio de trabajo
+</span><span>PWD := </span><span style=background:#282828;color:#569cd6>$(</span><span style=background:#282828;color:#dcdcdc>shell pwd</span><span style=background:#282828;color:#569cd6>)</span><span>
+</span><span>
+</span><span>all: 
+</span><span>	</span><span style=color:#569cd6>$(</span><span>MAKE</span><span style=color:#569cd6>) </span><span>-C </span><span style=color:#569cd6>$(</span><span>KERNELDIR</span><span style=color:#569cd6>)</span><span> M=</span><span style=color:#569cd6>$(</span><span>PWD</span><span style=color:#569cd6>)</span><span> modules
+</span><span>
+</span><span>clean:  
+</span><span>	rm -rf </span><span style=color:#569cd6>*</span><span>.o </span><span style=color:#569cd6>*</span><span>~ core .depend </span><span style=color:#569cd6>*</span><span>.mod.o .</span><span style=color:#569cd6>*</span><span>.cmd </span><span style=color:#569cd6>*</span><span>.ko </span><span style=color:#569cd6>*</span><span>.mod.c </span><span style=color:#569cd6>*</span><span>.mod
+</span><span>	rm -rf </span><span style=color:#569cd6>*</span><span>.tmp_versions </span><span style=color:#569cd6>*</span><span>.markers .</span><span style=color:#569cd6>*</span><span>.symvers modules.order
+</span><span>	rm -rf Module.symvers
+</span><span>	rm -rf </span><span style=color:#569cd6>*</span><span>.rmeta 
+</span><span>
+</span></code></pre><p>Ejecutamos <code>make</code> en nuestro directorio de trabajo y si todo salió bien, entonces la salida de <code>ls</code> debería de verse así<pre style=background:#1e1e1e;color:#dcdcdc><code><span>$ make LLVM=1 -j $(nproc)
+</span><span>$ ls -1
+</span><span>hola_mundo.ko
+</span><span>hola_mundo.mod
+</span><span>hola_mundo.mod.c
+</span><span>hola_mundo.mod.o
+</span><span>hola_mundo.o
+</span><span>hola_mundo.rs
+</span><span>libhola_mundo.rmeta
+</span><span>Makefile
+</span><span>modules.order
+</span><span>Module.symvers
+</span></code></pre><p>¡Excelente! ¿Ahora qué sigue?<p>Podemos ver qué información obtenemos de <code>hola_mundo.ko</code><pre style=background:#1e1e1e;color:#dcdcdc><code><span>$ modinfo hola_mundo.ko
+</span><span>
+</span><span>filename:       /home/carlos-II/Proyectos/rust/hello-world-kmod/hola_mundo.ko
+</span><span>author:         Carlos Carral
+</span><span>description:    Modulo de kernel hola_mundo
+</span><span>license:        GPL v2
+</span><span>depends:        
+</span><span>retpoline:      Y
+</span><span>name:           hola_mundo 
+</span><span>vermagic:       5.12.0-rc4rust1 SMP mod_unload 
+</span></code></pre><p>Todo parece indicar funcionó. Ahora intentaremos cargar el módulo al kernel compilado. Primero necesitamos de <em>bootear</em> nuestra imágen de kernel compilada. Esto lo podemos hacer a través de <code>make install</code> o con una máquina virtual. En mi caso elegí la segunda con <a href=https://github.com/vincentbernat/eudyptula-boot>eudyptula-boot</a> <strong>Ojo:</strong> <code>eudyptula-boot</code> requiere que ciertas opciones sean añadidas a <code>.config</code> antes de la compilación con <code>make</code>.<p>Una vez que hayamos <em>booteado</em> a nuestro kernel con alguna de las opciones anteriores, podemos cargar nuestro módulo.<h2 id=cargando-el-modulo-al-kernel>Cargando el módulo al kernel</h2><p>Cargamos nuestro módulo al kernel con <code>insmod</code><pre class=language-bash data-lang=bash style=background:#1e1e1e;color:#dcdcdc><code class=language-bash data-lang=bash><span>$ insmod hola_mundo.ko
+</span><span>[   19.985326] hola_mundo: Hola mundo, desde el kernel
+</span></code></pre><p>y lo descargamos con <code>rmmod</code><pre class=language-bash data-lang=bash style=background:#1e1e1e;color:#dcdcdc><code class=language-bash data-lang=bash><span>$ rmmod hola_mundo 
+</span><span>[  113.231790] hola_mundo: Adiós</span><span style=color:#569cd6>!
+</span></code></pre><p>Ahora, con <code>dmesg</code>, podemos ver los mensajes que nuestro módulo dejó en su breve paso por el kernel.<p><img alt=dmesg src=https://ccarral.github.io/projects/hello_world_kernel_module/dmesg_cap_es.png><p>Y es así como compilamos y cargamos un módulo de kernel de linux escrito en rust.<div class=center-column style=text-align:center><a class=center-column href=https://ccarral.github.io/projects/>[atrás]</a></div></article><script>$("img").wrap("<div id='post-img-container'></div>")</script></div>
