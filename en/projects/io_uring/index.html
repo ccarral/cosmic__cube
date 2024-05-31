@@ -1,0 +1,323 @@
+<!doctype html><html><head><title>
+        Making a cp implementation with liburing and rust
+    </title><link href=https://ccarral.github.io/favicon.ico rel=icon type=image/png><link href=https://ccarral.github.io/main.css media=screen rel=stylesheet><script src=https://code.jquery.com/jquery-3.5.0.js></script><script async data-goatcounter=https://cosmiccube.goatcounter.com/count src=//gc.zgo.at/count.js></script><meta charset=UTF-8><meta content="IE=edge" http-equiv=X-UA-Compatible><meta content="width=device-width,initial-scale=1.0" name=viewport><meta name=description><meta content=https://ccarral.github.io/images/tintan_y_yo.jpg name=image><meta content="Making a cp implementation with liburing and rust" name=twitter:title><meta name=twitter:description><meta content=summary_large_image name=twitter:card><meta content=https://ccarral.github.io/images/tintan_y_yo.jpg name=twitter:image><meta content=https://ccarral.github.io name=twitter:url><meta content=@0xC4C4 name=twitter:site><meta content=article property=og:type><meta content="Making a cp implementation with liburing and rust" property=og:title><meta property=og:description><meta content=https://ccarral.github.io/images/tintan_y_yo.jpg property=og:image><meta content=https://ccarral.github.io property=og:url><meta content="Making a cp implementation with liburing and rust" property=og:site_name><meta itemprop=name><meta itemprop=description><meta content=https://ccarral.github.io/images/tintan_y_yo.jpg itemprop=image><body class=background><div class=content><div class=center-column style=text-align:center><div class=center-column id=nav-container><a class=nav-element href=https://ccarral.github.io/en/>home</a> | <a class=nav-element href=https://ccarral.github.io/en/projects/>projects</a> | <a class=nav-accent href=https://ccarral.github.io/>es </a></div></div><article class="center-column content" id=post><h1 class=main-title>Making a cp implementation with liburing and rust</h1><p id=date>2023-04-12<p>Async I/O in linux has made a lot of progress, namely in the form of <a href=https://kernel.dk/io_uring.pdf>liburing</a>, which allows for "submitting" requests for system calls without having to call them from userspace directly. Being a kernel API, it is, of course, exposed to consumers through C.<p>However, these last few years I have taken interest in Rust, mostly because of its bold assertions regarding memory safety and overall polished nature of the language (in my opinion anyway), and I thought it would be interesting to leverage its memory guarantees for my use case.<h2 id=naive-cp-implementation-at-a-glance>Naive cp implementation at a glance</h2><p>A "naive" cp implementation in rust might look something like this:<pre class=language-rust data-lang=rust style=background:#1e1e1e;color:#dcdcdc><code class=language-rust data-lang=rust><span style=color:#569cd6>fn </span><span>naive_cp(in_path: </span><span style=color:#569cd6>&</span><span>PathBuf, out_path: </span><span style=color:#569cd6>&</span><span>PathBuf) -> Result<()> {
+</span><span>    </span><span style=color:#569cd6>let mut</span><span> in_file = File::open(in_path)</span><span style=color:#569cd6>?</span><span>;
+</span><span>    </span><span style=color:#569cd6>let mut</span><span> out_file = File::create(out_path)</span><span style=color:#569cd6>?</span><span>;
+</span><span>    </span><span style=color:#569cd6>let mut</span><span> buffer = [</span><span style=color:#b5cea8>0</span><span style=color:#569cd6>u8</span><span>; </span><span style=color:#b5cea8>1024 </span><span>* entries];
+</span><span>    </span><span style=color:#569cd6>loop </span><span>{
+</span><span>        </span><span style=color:#569cd6>let</span><span> bytes_read = in_file.read(</span><span style=color:#569cd6>&mut</span><span> buffer)</span><span style=color:#569cd6>?</span><span>;
+</span><span>        </span><span style=color:#569cd6>if</span><span> bytes_read == </span><span style=color:#b5cea8>0 </span><span>{
+</span><span>            </span><span style=color:#569cd6>return </span><span>Ok(());
+</span><span>        }
+</span><span>        out_file.write_all(</span><span style=color:#569cd6>&</span><span>buffer[</span><span style=color:#b5cea8>0</span><span style=color:#569cd6>..</span><span>bytes_read])</span><span style=color:#569cd6>?</span><span>;
+</span><span>    }
+</span><span>}
+</span></code></pre><p>This repeatedly calls into <a href=https://man7.org/linux/man-pages/man2/read.2.html><code>read(2)</code></a> and <a href=https://man7.org/linux/man-pages/man2/write.2.html><code>write(2)</code></a>, making it inefficent for large files.<h2 id=first-approach>First approach</h2><p>To truly make use of the bulk I/O transfer capabilities allowed to use, I'm going to make several <a href=https://man7.org/linux/man-pages/man2/readv.2.html><code>preadv2</code></a> calls chained, followed by their corresponding <a href=https://man7.org/linux/man-pages/man2/readv.2.html><code>pwritev2</code></a> into the output file.<p>Vectored reads "scatter" data from a file descriptor, into a collection of user-provided buffer, more specifically, an <code>struct iovec</code> which has the following structure:<pre class=language-c data-lang=c style=background:#1e1e1e;color:#dcdcdc><code class=language-c data-lang=c><span style=color:#569cd6>struct </span><span>iovec {
+</span><span>   </span><span style=color:#569cd6>void  *</span><span>iov_base;    </span><span style=color:#608b4e>/* Starting address */
+</span><span>   size_t iov_len;     </span><span style=color:#608b4e>/* Number of bytes to transfer */
+</span><span>};
+</span></code></pre><p>effectively reading into an array of buffers of len <code>IOVCNT</code>, per the man pages. However, if we want to make several vectored reads (followed by several vectored writes), our buffer needs to be mapped into an <code>ENTRIES x IOVCNT</code> matrix of <code>iovec</code>s<pre style=background:#1e1e1e;color:#dcdcdc><code><span>                                                    
+</span><span>
+</span><span>                                  IOVCNT                                            
+</span><span>               /----------------------------------------\                           
+</span><span>              /                                          \                          
+</span><span>      +--------------|--------------|-------------|--------------+                  
+</span><span>      | IOVEC_BUFLEN |     iovec    |    iovec    |    iovec     |    -             
+</span><span>      ------------------------------------------------------------     \            
+</span><span>      |              |              |             |              |     |            
+</span><span>      ------------------------------------------------------------     |   ENTRIES  
+</span><span>      |              |              |             |              |     |            
+</span><span>      ------------------------------------------------------------     |            
+</span><span>      |              |              |             |              |     /            
+</span><span>      +--------------|--------------|-------------|--------------+    -             
+</span><span>                                                    
+</span><span>                                                    
+</span></code></pre><p>We make our first attempt at reading in bulk as such:<pre class=language-rust data-lang=rust style=background:#1e1e1e;color:#dcdcdc><code class=language-rust data-lang=rust><span style=color:#569cd6>const </span><span style=color:#b4cea8>ENTRIES</span><span>: </span><span style=color:#569cd6>usize </span><span>= </span><span style=color:#b5cea8>32</span><span>;
+</span><span style=color:#569cd6>const </span><span style=color:#b4cea8>IOVCNT</span><span>: </span><span style=color:#569cd6>usize </span><span>= </span><span style=color:#b5cea8>16</span><span>;
+</span><span style=color:#569cd6>const </span><span style=color:#b4cea8>IOVCNT_BUFLEN</span><span>: </span><span style=color:#569cd6>usize </span><span>= </span><span style=color:#b5cea8>32</span><span>;
+</span><span style=color:#569cd6>const </span><span style=color:#b4cea8>BUFSIZE</span><span>: </span><span style=color:#569cd6>usize </span><span>= </span><span style=color:#b4cea8>ENTRIES </span><span>* </span><span style=color:#b4cea8>IOVCNT </span><span>* </span><span style=color:#b4cea8>IOVCNT_BUFLEN</span><span>;
+</span><span style=color:#569cd6>let mut</span><span> buffer = [</span><span style=color:#b5cea8>0</span><span style=color:#569cd6>u8</span><span>; </span><span style=color:#b4cea8>BUFSIZE</span><span>];
+</span><span style=color:#569cd6>let mut</span><span> io_uring = IoUring::new(</span><span style=color:#b4cea8>ENTRIES </span><span style=color:#569cd6>as u32</span><span>)</span><span style=color:#569cd6>?</span><span>;
+</span><span style=color:#569cd6>let</span><span> in_file = File::open(in_path)</span><span style=color:#569cd6>?</span><span>;
+</span><span style=color:#608b4e>// We want to iterate over the "rows" of the matrix, and array_chunks_mut gives
+</span><span style=color:#608b4e>// us mutable references to it
+</span><span style=color:#569cd6>for</span><span> slice </span><span style=color:#569cd6>in</span><span> buffer.array_chunks_mut::<</span><span style=color:#ff3333>{ </span><span style=color:#b4cea8>IOVCNT </span><span>* </span><span style=color:#b4cea8>IOVCNT_BUFLEN</span><span> }>() {
+</span><span>    </span><span style=color:#608b4e>// Slices need to be mutable, as the kernel is going to write into them!
+</span><span>    </span><span style=color:#569cd6>let mut</span><span> read_chunks: Vec&LTIoSliceMut> = slice
+</span><span>        </span><span style=color:#608b4e>// Divide the row into equal sized buffers
+</span><span>        .chunks_exact_mut(</span><span style=color:#b4cea8>IOVCNT_BUFLEN</span><span>)
+</span><span>        </span><span style=color:#608b4e>// Create an IoSliceMut from each individual buffer
+</span><span>        .map(IoSliceMut::new)
+</span><span>        </span><span style=color:#608b4e>// Collect into a vector
+</span><span>        .collect();
+</span><span>
+</span><span>    assert_eq!(</span><span style=color:#b4cea8>IOVCNT</span><span>, read_chunks.len());
+</span><span>
+</span><span>    </span><span style=color:#569cd6>let</span><span> readv_e = opcode::Readv::new(
+</span><span>        Fd(in_file.as_raw_fd()),
+</span><span>        </span><span style=color:#608b4e>// Pass the starting address of that vector to the call
+</span><span>        read_chunks.as_mut_ptr().cast(),
+</span><span>        </span><span style=color:#b4cea8>IOVCNT </span><span style=color:#569cd6>as _</span><span>,
+</span><span>    )
+</span><span>    .build()
+</span><span>    </span><span style=color:#608b4e>// Make completions appear in the same order as they were requested
+</span><span>    .flags(squeue::Flags::</span><span style=color:#b4cea8>IO_LINK</span><span>);
+</span><span>    </span><span style=color:#569cd6>unsafe </span><span>{
+</span><span>        </span><span style=color:#608b4e>// Submit read events
+</span><span>        io_uring.submission().push(</span><span style=color:#569cd6>&</span><span>readv_e)</span><span style=color:#569cd6>?</span><span>;
+</span><span>    }
+</span><span>}
+</span><span>
+</span><span style=color:#608b4e>// Block on completions
+</span><span>io_uring.submit_and_wait(</span><span style=color:#b4cea8>ENTRIES</span><span>)</span><span style=color:#569cd6>?</span><span>;
+</span><span style=color:#569cd6>let</span><span> completion_results: Vec<</span><span style=color:#569cd6>i32</span><span>> = io_uring.completion().map(|cqe| cqe.result()).collect();
+</span><span>assert!(completion_results.iter().all(|read_res| *read_res > </span><span style=color:#b5cea8>0</span><span>));
+</span></code></pre><p>But alas! this doesn't work. <code>preadv2()</code> either returns a positive integer or 0 if the call was successful and a negative integer indicating an error. In this case, the error alternated between <code>EINVAL</code> and <code>EFAULT</code>. Something funky was happening with the pointers we are sending to <code>preadv2()</code>.<p>On further inspection, it was noted to me that the references to <code>read_chunks</code> where being dropped on each iteration, meaning that they weren't valid pointers being sent to the kernel. Just another case of subtle memory errors being caught by the compiler.<p>We need the references we send to <code>push()</code> to outlive the reading operation, so on further refinement, our bulk read implementation with its corresponding bulk write looks something like this:<pre class=language-rust data-lang=rust style=background:#1e1e1e;color:#dcdcdc><code class=language-rust data-lang=rust><span style=color:#569cd6>const </span><span style=color:#b4cea8>ENTRIES</span><span>: </span><span style=color:#569cd6>usize </span><span>= </span><span style=color:#b5cea8>32</span><span>;
+</span><span style=color:#569cd6>const </span><span style=color:#b4cea8>IOVCNT</span><span>: </span><span style=color:#569cd6>usize </span><span>= </span><span style=color:#b5cea8>16</span><span>;
+</span><span style=color:#569cd6>const </span><span style=color:#b4cea8>IOVEC_BUFLEN</span><span>: </span><span style=color:#569cd6>usize </span><span>= </span><span style=color:#b5cea8>32</span><span>;
+</span><span style=color:#569cd6>const </span><span style=color:#b4cea8>BUFSIZE</span><span>: </span><span style=color:#569cd6>usize </span><span>= </span><span style=color:#b4cea8>ENTRIES </span><span>* </span><span style=color:#b4cea8>IOVCNT </span><span>* </span><span style=color:#b4cea8>IOVEC_BUFLEN</span><span>;
+</span><span style=color:#569cd6>let mut</span><span> buffer = [</span><span style=color:#b5cea8>0</span><span style=color:#569cd6>u8</span><span>; </span><span style=color:#b4cea8>BUFSIZE</span><span>];
+</span><span style=color:#569cd6>let mut</span><span> io_uring = IoUring::new(</span><span style=color:#b4cea8>ENTRIES </span><span style=color:#569cd6>as u32</span><span>)</span><span style=color:#569cd6>?</span><span>;
+</span><span style=color:#569cd6>let</span><span> in_file = File::open(in_path)</span><span style=color:#569cd6>?</span><span>;
+</span><span style=color:#569cd6>let</span><span> file_size = in_file.metadata()</span><span style=color:#569cd6>?</span><span>.size();
+</span><span style=color:#569cd6>let</span><span> out_file = File::create(out_path)</span><span style=color:#569cd6>?</span><span>;
+</span><span>
+</span><span style=color:#569cd6>let</span><span> needed_rows = (file_size </span><span style=color:#569cd6>as usize</span><span>).div_ceil(</span><span style=color:#b4cea8>IOVCNT </span><span>* </span><span style=color:#b4cea8>IOVEC_BUFLEN</span><span>);
+</span><span style=color:#608b4e>// Slices need to be mutable, as the kernel is going to write into them!
+</span><span style=color:#569cd6>let mut</span><span> read_slices: Vec<</span><span style=color:#569cd6>_</span><span>> = buffer
+</span><span>    </span><span style=color:#608b4e>// Divide the row into equal sized buffers
+</span><span>    .array_chunks_mut::&LTIOVEC_BUFLEN>()
+</span><span>    </span><span style=color:#608b4e>// Array chunks returns "little arrays", but IoSliceMut::new()
+</span><span>    </span><span style=color:#608b4e>// Takes slices as input
+</span><span>    .map(AsMut::as_mut)
+</span><span>    </span><span style=color:#608b4e>// Create an IoSliceMut from each individual buffer, which 
+</span><span>    </span><span style=color:#608b4e>// rust coerces into an iovec
+</span><span>    .map(IoSliceMut::new)
+</span><span>    </span><span style=color:#608b4e>// Collect into a vector. We might want to optimize this so 
+</span><span>    </span><span style=color:#608b4e>// no allocations occur.
+</span><span>    .collect();
+</span><span>
+</span><span>assert_eq!(read_slices.len(), </span><span style=color:#b4cea8>IOVCNT </span><span>* </span><span style=color:#b4cea8>ENTRIES</span><span>);
+</span><span>assert!(needed_rows <= </span><span style=color:#b4cea8>ENTRIES</span><span>);
+</span><span>
+</span><span style=color:#569cd6>let</span><span> readv_es: Vec<</span><span style=color:#569cd6>_</span><span>> = read_slices
+</span><span>    </span><span style=color:#608b4e>// Take up to IOVCNT IoSliceMut's at a time
+</span><span>    .chunks_exact_mut(</span><span style=color:#b4cea8>IOVCNT</span><span>)
+</span><span>    </span><span style=color:#608b4e>// We need to take into account the offset argument we are passing to 
+</span><span>    </span><span style=color:#608b4e>// preadv2
+</span><span>    .zip((</span><span style=color:#b5cea8>0</span><span style=color:#569cd6>..</span><span style=color:#b4cea8>BUFSIZE</span><span>).step_by(</span><span style=color:#b4cea8>IOVEC_BUFLEN </span><span>* </span><span style=color:#b4cea8>IOVCNT</span><span>))
+</span><span>    .map(|(slice, offset)| {
+</span><span>        opcode::Readv::new(
+</span><span>            Fd(in_file.as_raw_fd()),
+</span><span>            slice.as_mut_ptr().cast(),
+</span><span>            </span><span style=color:#b4cea8>IOVCNT </span><span style=color:#569cd6>as _</span><span>,
+</span><span>        )
+</span><span>        .offset(offset </span><span style=color:#569cd6>as u64</span><span>)
+</span><span>        .build()
+</span><span>        </span><span style=color:#608b4e>// Make reads sequential (Might not need this)
+</span><span>        .flags(squeue::Flags::</span><span style=color:#b4cea8>IO_LINK</span><span>)
+</span><span>        </span><span style=color:#608b4e>// Unchanged by the kernel on completion, but helps us with debugging
+</span><span>        .user_data(</span><span style=color:#b5cea8>0x01</span><span>)
+</span><span>    })
+</span><span>    </span><span style=color:#608b4e>// We might not need the whole buffer, so we only take the "rows" we need
+</span><span>    .take(needed_rows)
+</span><span>    .collect();
+</span><span>
+</span><span>assert_eq!(needed_rows, readv_es.len());
+</span><span style=color:#569cd6>for</span><span> e </span><span style=color:#569cd6>in</span><span> readv_es {
+</span><span>    </span><span style=color:#569cd6>unsafe </span><span>{
+</span><span>        io_uring.submission().push(</span><span style=color:#569cd6>&</span><span>e)</span><span style=color:#569cd6>?</span><span>;
+</span><span>    }
+</span><span>}
+</span><span>
+</span><span>io_uring.submit_and_wait(needed_rows)</span><span style=color:#569cd6>?</span><span>;
+</span><span style=color:#569cd6>let</span><span> completion_results: Vec<</span><span style=color:#569cd6>i32</span><span>> = io_uring.completion().map(|cqe| cqe.result()).collect();
+</span><span style=color:#569cd6>let</span><span> read_bytes: </span><span style=color:#569cd6>i32 </span><span>= completion_results.iter().sum();
+</span><span style=color:#569cd6>let</span><span> original_contents = fs::read_to_string(in_path)</span><span style=color:#569cd6>?</span><span>;
+</span><span style=color:#569cd6>let</span><span> read_contents = String::from_utf8(buffer[</span><span style=color:#b5cea8>0</span><span style=color:#569cd6>..</span><span>(read_bytes </span><span style=color:#569cd6>as usize</span><span>)].into())</span><span style=color:#569cd6>?</span><span>;
+</span><span style=color:#608b4e>// Ensure we read correctly, will be removed afterwards
+</span><span>assert_eq!(original_contents, read_contents);
+</span><span>
+</span><span style=color:#608b4e>// Collect preadv2() call results, might need to check we got no OS errors
+</span><span style=color:#569cd6>let</span><span> actual_bytes_read: </span><span style=color:#569cd6>i32 </span><span>= completion_results.iter().sum();
+</span><span>
+</span><span style=color:#608b4e>// We might have read less bytes than we expected, so we need to account
+</span><span style=color:#608b4e>// for that by 'shortening' our buffer, dividing it up into IOVEC_BUFLEN
+</span><span style=color:#608b4e>// sizes and chaining the remaining, possibly smaller buffer (if any)
+</span><span style=color:#569cd6>let</span><span> bytes_read_buffer = </span><span style=color:#569cd6>&</span><span>buffer[</span><span style=color:#569cd6>..</span><span>actual_bytes_read </span><span style=color:#569cd6>as usize</span><span>];
+</span><span style=color:#569cd6>let</span><span> write_buf_chunks = bytes_read_buffer.array_chunks::&LTIOVEC_BUFLEN>();
+</span><span style=color:#569cd6>let</span><span> rem = write_buf_chunks.remainder();
+</span><span>
+</span><span style=color:#569cd6>let</span><span> write_slices: Vec<</span><span style=color:#569cd6>_</span><span>> = write_buf_chunks
+</span><span>    .map(AsRef::as_ref)
+</span><span>    .chain(std::iter::once(rem))
+</span><span>    .map(IoSlice::new)
+</span><span>    .collect();
+</span><span>
+</span><span style=color:#569cd6>let</span><span> write_sqes: Vec<</span><span style=color:#569cd6>_</span><span>> = write_slices
+</span><span>    .chunks(</span><span style=color:#b4cea8>IOVCNT</span><span>)
+</span><span>    .zip((</span><span style=color:#b5cea8>0</span><span style=color:#569cd6>..</span><span>actual_bytes_read).step_by(</span><span style=color:#b4cea8>IOVEC_BUFLEN </span><span>* </span><span style=color:#b4cea8>IOVCNT</span><span>))
+</span><span>    .map(|(slice, offset)| {
+</span><span>        </span><span style=color:#608b4e>// The slice we got here might be smaller than the row size,
+</span><span>        </span><span style=color:#608b4e>// and the actual iovecs we need might be less than IOVECNT
+</span><span>        </span><span style=color:#569cd6>let</span><span> underlying_memory_size = slice.iter().fold(</span><span style=color:#b5cea8>0</span><span>, |acc, s| acc + s.len());
+</span><span>        </span><span style=color:#569cd6>let</span><span> iovecnt = underlying_memory_size.div_ceil(</span><span style=color:#b4cea8>IOVEC_BUFLEN</span><span>);
+</span><span>        opcode::Writev::new(
+</span><span>            Fd(out_file.as_raw_fd()),
+</span><span>            slice.as_ptr().cast(),
+</span><span>            iovecnt </span><span style=color:#569cd6>as _</span><span>,
+</span><span>        )
+</span><span>        .offset(offset </span><span style=color:#569cd6>as u64</span><span>)
+</span><span>        .build()
+</span><span>        .flags(squeue::Flags::</span><span style=color:#b4cea8>IO_LINK</span><span>)
+</span><span>        .user_data(</span><span style=color:#b5cea8>0x02</span><span>)
+</span><span>    })
+</span><span>    .collect();
+</span><span>
+</span><span style=color:#569cd6>let</span><span> write_len = write_sqes.len();
+</span><span>assert_eq!(write_len, needed_rows);
+</span><span style=color:#569cd6>for</span><span> e </span><span style=color:#569cd6>in</span><span> write_sqes {
+</span><span>    </span><span style=color:#569cd6>unsafe </span><span>{
+</span><span>        io_uring.submission().push(</span><span style=color:#569cd6>&</span><span>e)</span><span style=color:#569cd6>?</span><span>;
+</span><span>    }
+</span><span>}
+</span><span>io_uring.submit_and_wait(needed_rows)</span><span style=color:#569cd6>?</span><span>;
+</span></code></pre><p>and... it works! Not without a little tweaking first though, but it does work. But currently, it only works because our buffer is bigger than our input file, so we need to put this inside a loop. Additionally, it would be nice to do this without any allocations whatsoever...<h2 id=the-final-product>The final product</h2><p>Brace yourselves, as our buffer arithmetics need to be on point for this one:<pre class=language-rust data-lang=rust style=background:#1e1e1e;color:#dcdcdc><code class=language-rust data-lang=rust><span style=color:#569cd6>fn </span><span>liburing_cp(in_path: </span><span style=color:#569cd6>&</span><span>PathBuf, out_path: </span><span style=color:#569cd6>&</span><span>PathBuf) -> Result<()> {
+</span><span>    </span><span style=color:#569cd6>const </span><span style=color:#b4cea8>ENTRIES</span><span>: </span><span style=color:#569cd6>usize </span><span>= </span><span style=color:#b5cea8>8</span><span>;
+</span><span>    </span><span style=color:#569cd6>const </span><span style=color:#b4cea8>IOVCNT</span><span>: </span><span style=color:#569cd6>usize </span><span>= </span><span style=color:#b5cea8>8</span><span>;
+</span><span>    </span><span style=color:#569cd6>const </span><span style=color:#b4cea8>IOVEC_BUFLEN</span><span>: </span><span style=color:#569cd6>usize </span><span>= </span><span style=color:#b5cea8>32</span><span>;
+</span><span>    </span><span style=color:#569cd6>const </span><span style=color:#b4cea8>BUFSIZE</span><span>: </span><span style=color:#569cd6>usize </span><span>= </span><span style=color:#b4cea8>ENTRIES </span><span>* </span><span style=color:#b4cea8>IOVCNT </span><span>* </span><span style=color:#b4cea8>IOVEC_BUFLEN</span><span>;
+</span><span>    </span><span style=color:#569cd6>let mut</span><span> buffer = [</span><span style=color:#b5cea8>0</span><span style=color:#569cd6>u8</span><span>; </span><span style=color:#b4cea8>BUFSIZE</span><span>];
+</span><span>    </span><span style=color:#569cd6>let mut</span><span> io_uring = IoUring::new(</span><span style=color:#b4cea8>ENTRIES </span><span style=color:#569cd6>as u32</span><span>)</span><span style=color:#569cd6>?</span><span>;
+</span><span>    </span><span style=color:#569cd6>let</span><span> in_file = File::open(in_path)</span><span style=color:#569cd6>?</span><span>;
+</span><span>    </span><span style=color:#569cd6>let</span><span> file_size = in_file.metadata()</span><span style=color:#569cd6>?</span><span>.size();
+</span><span>    </span><span style=color:#569cd6>let</span><span> out_file = File::create(out_path)</span><span style=color:#569cd6>?</span><span>;
+</span><span>
+</span><span>    </span><span style=color:#608b4e>// We need to know how much of the file we are going to be reading off every iteration
+</span><span>    </span><span style=color:#569cd6>let</span><span> whole_chunks = file_size </span><span style=color:#569cd6>as usize </span><span>/ </span><span style=color:#b4cea8>BUFSIZE</span><span>;
+</span><span>    </span><span style=color:#569cd6>let</span><span> partial_chunk = file_size </span><span style=color:#569cd6>as usize </span><span>% </span><span style=color:#b4cea8>BUFSIZE</span><span>;
+</span><span>    </span><span style=color:#569cd6>let mut</span><span> file_chunk_sizes = (</span><span style=color:#b5cea8>0</span><span style=color:#569cd6>..</span><span>whole_chunks).map(|_| </span><span style=color:#b4cea8>BUFSIZE</span><span>).collect::&LTVec<</span><span style=color:#569cd6>_</span><span>>>();
+</span><span>    file_chunk_sizes.push(partial_chunk);
+</span><span>    </span><span style=color:#569cd6>let</span><span> offsets = file_chunk_sizes
+</span><span>        .into_iter()
+</span><span>        .enumerate()
+</span><span>        .map(|(i, chunk_size)| (chunk_size, i * </span><span style=color:#b4cea8>BUFSIZE</span><span>, i * </span><span style=color:#b4cea8>BUFSIZE </span><span>+ chunk_size));
+</span><span>
+</span><span>    </span><span style=color:#569cd6>let mut</span><span> preadv2_sqes = Vec::with_capacity(</span><span style=color:#b4cea8>ENTRIES</span><span>);
+</span><span>    </span><span style=color:#569cd6>let mut</span><span> pwritev2_sqes = Vec::with_capacity(</span><span style=color:#b4cea8>ENTRIES</span><span>);
+</span><span>
+</span><span>    </span><span style=color:#569cd6>for </span><span>(file_chunk_sz, start, end) </span><span style=color:#569cd6>in</span><span> offsets {
+</span><span>        assert!(file_chunk_sz <= </span><span style=color:#b4cea8>BUFSIZE</span><span>);
+</span><span>        </span><span style=color:#608b4e>// At most, this will always be ENTRIES
+</span><span>        </span><span style=color:#569cd6>let</span><span> needed_rows = file_chunk_sz.div_ceil(</span><span style=color:#b4cea8>IOVCNT </span><span>* </span><span style=color:#b4cea8>IOVEC_BUFLEN</span><span>);
+</span><span>        assert!(needed_rows <= </span><span style=color:#b4cea8>ENTRIES</span><span>);
+</span><span>
+</span><span>        </span><span style=color:#608b4e>// Slices need to be mutable, as the kernel is going to write into them!
+</span><span>        </span><span style=color:#569cd6>let mut</span><span> read_slices: Vec<</span><span style=color:#569cd6>_</span><span>> = buffer
+</span><span>            </span><span style=color:#608b4e>// Divide the row into equal sized buffers
+</span><span>            .array_chunks_mut::&LTIOVEC_BUFLEN>()
+</span><span>            </span><span style=color:#608b4e>// Array chunks returns "little arrays", but IoSliceMut::new()
+</span><span>            </span><span style=color:#608b4e>// Takes slices as input
+</span><span>            .map(AsMut::as_mut)
+</span><span>            </span><span style=color:#608b4e>// Array chunks returns "little arrays", but IoSliceMut::new()
+</span><span>            </span><span style=color:#608b4e>// Takes slices as input
+</span><span>            .map(IoSliceMut::new)
+</span><span>            </span><span style=color:#608b4e>// Collect into a vector. We might want to optimize this so
+</span><span>            </span><span style=color:#608b4e>// no allocations occur.
+</span><span>            .collect();
+</span><span>
+</span><span>        </span><span style=color:#608b4e>// Drop previously inserted sqes
+</span><span>        preadv2_sqes.truncate(</span><span style=color:#b5cea8>0</span><span>);
+</span><span>        read_slices
+</span><span>            </span><span style=color:#608b4e>// Take up to IOVCNT IoSliceMut's at a time
+</span><span>            .chunks_exact_mut(</span><span style=color:#b4cea8>IOVCNT</span><span>)
+</span><span>            </span><span style=color:#608b4e>// We need to take into account the offset argument we are passing to
+</span><span>            </span><span style=color:#608b4e>// preadv2
+</span><span>            .zip((start</span><span style=color:#569cd6>..</span><span>end).step_by(</span><span style=color:#b4cea8>IOVEC_BUFLEN </span><span>* </span><span style=color:#b4cea8>IOVCNT</span><span>))
+</span><span>            .map(|(slice, offset)| {
+</span><span>                opcode::Readv::new(
+</span><span>                    Fd(in_file.as_raw_fd()),
+</span><span>                    slice.as_mut_ptr().cast(),
+</span><span>                    </span><span style=color:#b4cea8>IOVCNT </span><span style=color:#569cd6>as _</span><span>,
+</span><span>                )
+</span><span>                .offset(offset </span><span style=color:#569cd6>as u64</span><span>)
+</span><span>                .build()
+</span><span>                </span><span style=color:#608b4e>// Unchanged by the kernel on completion, but helps us with debugging
+</span><span>                .user_data(</span><span style=color:#b5cea8>0x01</span><span>)
+</span><span>            })
+</span><span>            </span><span style=color:#608b4e>// We might not need the whole buffer, so we only take the "rows" we need
+</span><span>            .take(needed_rows)
+</span><span>            .collect_into(</span><span style=color:#569cd6>&mut</span><span> preadv2_sqes);
+</span><span>
+</span><span>        assert_eq!(preadv2_sqes.len(), needed_rows);
+</span><span>        </span><span style=color:#569cd6>for</span><span> e </span><span style=color:#569cd6>in &</span><span>preadv2_sqes {
+</span><span>            </span><span style=color:#569cd6>unsafe </span><span>{
+</span><span>                io_uring.submission().push(e)</span><span style=color:#569cd6>?</span><span>;
+</span><span>            }
+</span><span>        }
+</span><span>
+</span><span>        io_uring.submit_and_wait(needed_rows)</span><span style=color:#569cd6>?</span><span>;
+</span><span>        </span><span style=color:#569cd6>let</span><span> completion_results: Vec<</span><span style=color:#569cd6>i32</span><span>> = io_uring.completion().map(|cqe| cqe.result()).collect();
+</span><span>
+</span><span>        </span><span style=color:#569cd6>let</span><span> actual_bytes_read: </span><span style=color:#569cd6>i32 </span><span>= completion_results.iter().sum();
+</span><span>
+</span><span>        </span><span style=color:#608b4e>// We might have read less bytes than we expected, so we need to account
+</span><span>        </span><span style=color:#608b4e>// for that by 'shortening' our buffer, dividing it up into IOVEC_BUFLEN
+</span><span>        </span><span style=color:#608b4e>// sizes and chaining the remaining, possibly smaller buffer (if any)
+</span><span>        </span><span style=color:#569cd6>let</span><span> bytes_read_buffer = </span><span style=color:#569cd6>&</span><span>buffer[</span><span style=color:#569cd6>..</span><span>actual_bytes_read </span><span style=color:#569cd6>as usize</span><span>];
+</span><span>        </span><span style=color:#569cd6>let</span><span> write_buf_chunks = bytes_read_buffer.array_chunks::&LTIOVEC_BUFLEN>();
+</span><span>        </span><span style=color:#569cd6>let</span><span> rem = write_buf_chunks.remainder();
+</span><span>
+</span><span>        </span><span style=color:#569cd6>let</span><span> write_slices: Vec<</span><span style=color:#569cd6>_</span><span>> = write_buf_chunks
+</span><span>            .map(AsRef::as_ref)
+</span><span>            .chain(std::iter::once(rem))
+</span><span>            .map(IoSlice::new)
+</span><span>            .collect();
+</span><span>
+</span><span>        </span><span style=color:#608b4e>// Drop previously inserted sqes
+</span><span>        pwritev2_sqes.truncate(</span><span style=color:#b5cea8>0</span><span>);
+</span><span>        write_slices
+</span><span>            .chunks(</span><span style=color:#b4cea8>IOVCNT</span><span>)
+</span><span>            .zip((start</span><span style=color:#569cd6>..</span><span>start + actual_bytes_read </span><span style=color:#569cd6>as usize</span><span>).step_by(</span><span style=color:#b4cea8>IOVEC_BUFLEN </span><span>* </span><span style=color:#b4cea8>IOVCNT</span><span>))
+</span><span>            .map(|(slice, offset)| {
+</span><span>                </span><span style=color:#608b4e>// The slice we got here might be smaller than the row size,
+</span><span>                </span><span style=color:#608b4e>// and the actual iovecs we need might be less than IOVECNT
+</span><span>                </span><span style=color:#569cd6>let</span><span> underlying_memory_size = slice.iter().fold(</span><span style=color:#b5cea8>0</span><span>, |acc, s| acc + s.len());
+</span><span>                </span><span style=color:#569cd6>let</span><span> iovecnt = underlying_memory_size.div_ceil(</span><span style=color:#b4cea8>IOVEC_BUFLEN</span><span>);
+</span><span>                opcode::Writev::new(
+</span><span>                    Fd(out_file.as_raw_fd()),
+</span><span>                    slice.as_ptr().cast(),
+</span><span>                    iovecnt </span><span style=color:#569cd6>as _</span><span>,
+</span><span>                )
+</span><span>                .offset(offset </span><span style=color:#569cd6>as u64</span><span>)
+</span><span>                .build()
+</span><span>                .flags(squeue::Flags::</span><span style=color:#b4cea8>IO_LINK</span><span>)
+</span><span>                .user_data(</span><span style=color:#b5cea8>0x02</span><span>)
+</span><span>            })
+</span><span>            .take(needed_rows)
+</span><span>            .collect_into(</span><span style=color:#569cd6>&mut</span><span> pwritev2_sqes);
+</span><span>
+</span><span>        assert_eq!(pwritev2_sqes.len(), needed_rows);
+</span><span>        </span><span style=color:#569cd6>for</span><span> e </span><span style=color:#569cd6>in &</span><span>pwritev2_sqes {
+</span><span>            </span><span style=color:#569cd6>unsafe </span><span>{
+</span><span>                io_uring.submission().push(e)</span><span style=color:#569cd6>?</span><span>;
+</span><span>            }
+</span><span>        }
+</span><span>        io_uring.submit_and_wait(needed_rows)</span><span style=color:#569cd6>?</span><span>;
+</span><span>        </span><span style=color:#608b4e>// We need to consume the iterator, otherwise remaining sqes will remain on our final
+</span><span>        </span><span style=color:#608b4e>// iteration!
+</span><span>        </span><span style=color:#569cd6>let _</span><span>: Vec<</span><span style=color:#569cd6>i32</span><span>> = io_uring.completion().map(|cqe| cqe.result()).collect();
+</span><span>    }
+</span><span>
+</span><span>    Ok(())
+</span><span>}
+</span><span>
+</span></code></pre><p>Now, it <em>is</em> kind of hard to follow, specially when it comes to all of the offsets involved, but I found that rust's functional programming style allowed me to focus on the actual buffer arithmetic and system call parameters, rather than focusing on tricky loop variables.<p>Now we just call it from our <code>main()</code> as such:<pre class=language-rust data-lang=rust style=background:#1e1e1e;color:#dcdcdc><code class=language-rust data-lang=rust><span style=color:#569cd6>fn </span><span>main() {
+</span><span>    </span><span style=color:#569cd6>let</span><span> args: Vec&LTString> = std::env::args().collect();
+</span><span>    </span><span style=color:#569cd6>let </span><span>(in_path, out_path) = cmd::parse_args(</span><span style=color:#569cd6>&</span><span>args).expect(</span><span style=color:#d69d85>"args error"</span><span>);
+</span><span>    liburing_cp(</span><span style=color:#569cd6>&</span><span>in_path, </span><span style=color:#569cd6>&</span><span>out_path).expect(</span><span style=color:#d69d85>"uring cp"</span><span>);
+</span><span>    </span><span style=color:#569cd6>let</span><span> original_contents = fs::read_to_string(</span><span style=color:#569cd6>&</span><span>in_path).expect(</span><span style=color:#d69d85>"reading original file"</span><span>);
+</span><span>    </span><span style=color:#569cd6>let</span><span> actual_contents = fs::read_to_string(</span><span style=color:#569cd6>&</span><span>out_path).expect(</span><span style=color:#d69d85>"reading output file"</span><span>);
+</span><span>    assert_eq!(original_contents, actual_contents);
+</span><span>}
+</span></code></pre><p>And TADA!, we are done.<h2 id=wrapping-up>Wrapping up</h2><p>I have to confess that this probably wasn't the most <em>rustic</em> approach. <a href=https://docs.rs/rio/0.9.4/rio/>rio</a> exposes an API that doesn't need to reach into <code>unsafe</code> code, but where is the fun in that? Overall, even this basic wrapper around the API seems to show great promise for speeding I/O bound programs!<p>P.S, the inspiration for this post came from <a href=https://unixism.net/loti/tutorial/cp_liburing.html>here</a><div class=center-column style=text-align:center><a class=center-column href=https://ccarral.github.io/en/projects/>[back]</a></div></article><script>$("img").wrap("<div id='post-img-container'></div>")</script></div>
