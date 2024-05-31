@@ -243,7 +243,7 @@ So, in short: I was passing `void**` into a function that expects `void*`.
 
 ```c
 // Now everything is working dandy.
-xTaskNotifyGive(&render_task);
+xTaskNotifyGive(render_task);
 ```
 
 
