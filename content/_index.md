@@ -11,7 +11,4 @@ computadoras y otras cosas.
 
 Ingeniero en computación (UAEMex 23). 
 
-Dedico mi tiempo a programar, leer y ver películas. Me interesa la programación de bajo nivel y 
-todo lo que tenga que ver con computadoras.
-
-Actualmente hago desarrollo backend en [Vauxoo](https://www.vauxoo.com/).
+Dedico mi tiempo a programar, leer y ver películas. Me interesa la programación de bajo nivel.

@@ -13,6 +13,4 @@ Computer engineer (UAEMex, class of 23).
 
 
 I dedicate my time to programming, reading and watching movies from time to time.
-Into kernel development and low level stuff. Everything computer related, really.
-
-Currently doing backend development @ [Vauxoo](https://www.vauxoo.com/).
+Into kernel development and low level stuff.
