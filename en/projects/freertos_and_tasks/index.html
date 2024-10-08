@@ -1,0 +1,175 @@
+<!doctype html><html><head><title>
+        Fun with FreeRTOS and sync primitives
+    </title><link href=https://ccarral.github.io/favicon.ico rel=icon type=image/png><link href=https://ccarral.github.io/main.css media=screen rel=stylesheet><script src=https://code.jquery.com/jquery-3.5.0.js></script><script async data-goatcounter=https://cosmiccube.goatcounter.com/count src=//gc.zgo.at/count.js></script><meta charset=UTF-8><meta content="IE=edge" http-equiv=X-UA-Compatible><meta content="width=device-width,initial-scale=1.0" name=viewport><meta name=description><meta content=https://ccarral.github.io/images/tintan_y_yo.jpg name=image><meta content="Fun with FreeRTOS and sync primitives" name=twitter:title><meta name=twitter:description><meta content=summary_large_image name=twitter:card><meta content=https://ccarral.github.io/images/tintan_y_yo.jpg name=twitter:image><meta content=https://ccarral.github.io name=twitter:url><meta content=@0xC4C4 name=twitter:site><meta content=article property=og:type><meta content="Fun with FreeRTOS and sync primitives" property=og:title><meta property=og:description><meta content=https://ccarral.github.io/images/tintan_y_yo.jpg property=og:image><meta content=https://ccarral.github.io property=og:url><meta content="Fun with FreeRTOS and sync primitives" property=og:site_name><meta itemprop=name><meta itemprop=description><meta content=https://ccarral.github.io/images/tintan_y_yo.jpg itemprop=image><body class=background><div class=content><div class=center-column style=text-align:center><div class=center-column id=nav-container><a class=nav-element href=https://ccarral.github.io/en/>home</a> | <a class=nav-element href=https://ccarral.github.io/en/projects/>projects</a> | <a class=nav-accent href=https://ccarral.github.io/>es </a></div></div><article class="center-column content" id=post><h1 class=main-title>Fun with FreeRTOS and sync primitives</h1><p id=date>2024-04-04<p>So, I'm currently building a tiny little thing called minuteman. It's an esp-idf based alarm clock, complete with a 7 segment display. It's in its early stages. I want to use a rotary encoder as input, so I can modify the alarm time, but lets go one step at a time.<p>The basic test code for the rotary encoder looks like this:<pre class=language-c data-lang=c style=background:#1e1e1e;color:#dcdcdc><code class=language-c data-lang=c><span style=color:#608b4e>// headers and defines
+</span><span>
+</span><span style=color:#569cd6>typedef struct </span><span>{
+</span><span>    </span><span style=color:#569cd6>char</span><span> digits[</span><span style=color:#b5cea8>9</span><span>];
+</span><span>    max7219_t</span><span style=color:#569cd6>*</span><span> display;
+</span><span>} </span><span style=color:#4ec9b0>minuteman_t</span><span>;
+</span><span>
+</span><span style=color:#569cd6>static</span><span> max7219_t display;
+</span><span style=color:#569cd6>static</span><span> minuteman_t device;
+</span><span>
+</span><span style=color:#569cd6>void </span><span>render_display(minuteman_t</span><span style=color:#569cd6>* </span><span>dev){
+</span><span>    max7219_clear(dev->display);
+</span><span>    max7219_draw_text_7seg(dev->display, </span><span style=color:#b5cea8>0</span><span>, dev->digits);
+</span><span>}
+</span><span>
+</span><span style=color:#569cd6>void </span><span>minuteman_init(minuteman_t</span><span style=color:#569cd6>* </span><span>dev, max7219_t</span><span style=color:#569cd6>* </span><span>display){
+</span><span>    dev->display = display;
+</span><span>    sprintf(dev->digits, </span><span style=color:#d69d85>"00000000"</span><span>);
+</span><span>}
+</span><span>
+</span><span style=color:#569cd6>void </span><span>encoder_test(</span><span style=color:#569cd6>void *</span><span>arg)
+</span><span>{
+</span><span>    rotary_encoder_event_t e;
+</span><span>    int32_t val = </span><span style=color:#b5cea8>0</span><span>;
+</span><span>
+</span><span>    ESP_LOGI(TAG, </span><span style=color:#d69d85>"Initial value: %"</span><span> PRIi32, val);
+</span><span>    </span><span style=color:#569cd6>while </span><span>(</span><span style=color:#b5cea8>1</span><span>)
+</span><span>    {
+</span><span>        xQueueReceive(event_queue, </span><span style=color:#569cd6>&</span><span>e, portMAX_DELAY);
+</span><span>
+</span><span>        </span><span style=color:#569cd6>switch </span><span>(e.type)
+</span><span>        {
+</span><span>            </span><span style=color:#569cd6>case</span><span> RE_ET_BTN_PRESSED:
+</span><span>                ESP_LOGI(TAG, </span><span style=color:#d69d85>"Button pressed"</span><span>);
+</span><span>                </span><span style=color:#569cd6>break</span><span>;
+</span><span>            </span><span style=color:#569cd6>case</span><span> RE_ET_BTN_RELEASED:
+</span><span>                ESP_LOGI(TAG, </span><span style=color:#d69d85>"Button released"</span><span>);
+</span><span>                </span><span style=color:#569cd6>break</span><span>;
+</span><span>            </span><span style=color:#569cd6>case</span><span> RE_ET_BTN_CLICKED:
+</span><span>                ESP_LOGI(TAG, </span><span style=color:#d69d85>"Button clicked"</span><span>);
+</span><span>                </span><span style=color:#569cd6>break</span><span>;
+</span><span>            </span><span style=color:#569cd6>case</span><span> RE_ET_BTN_LONG_PRESSED:
+</span><span>                ESP_LOGI(TAG, </span><span style=color:#d69d85>"Looooong pressed button"</span><span>);
+</span><span>                </span><span style=color:#569cd6>break</span><span>;
+</span><span>            </span><span style=color:#569cd6>case</span><span> RE_ET_CHANGED:
+</span><span>                val += e.diff;
+</span><span>                sprintf(device.digits, </span><span style=color:#d69d85>"</span><span style=color:#b4cea8>%08d</span><span style=color:#d69d85>"</span><span>, val);
+</span><span>                render_display(</span><span style=color:#569cd6>&</span><span>device);
+</span><span>                </span><span style=color:#569cd6>break</span><span>;
+</span><span>            </span><span style=color:#569cd6>default</span><span>:
+</span><span>                </span><span style=color:#569cd6>break</span><span>;
+</span><span>        }
+</span><span>    }
+</span><span>}
+</span><span>
+</span><span style=color:#569cd6>void </span><span>app_main(</span><span style=color:#569cd6>void</span><span>)
+</span><span>{
+</span><span>    ESP_ERROR_CHECK(nvs_flash_init()); 
+</span><span>    display_init(</span><span style=color:#569cd6>&</span><span>display);
+</span><span>    encoder_init(</span><span style=color:#569cd6>&</span><span>encoder);
+</span><span>    minuteman_init(</span><span style=color:#569cd6>&</span><span>device, </span><span style=color:#569cd6>&</span><span>display);
+</span><span>    xTaskCreate(encoder_test, TAG, configMINIMAL_STACK_SIZE </span><span style=color:#569cd6>* </span><span style=color:#b5cea8>8</span><span>, </span><span style=color:#569cd6>NULL</span><span>, </span><span style=color:#b5cea8>5</span><span>, </span><span style=color:#569cd6>NULL</span><span>);
+</span><span>    vTaskDelay(pdMS_TO_TICKS(</span><span style=color:#b5cea8>30000</span><span>));
+</span><span>    </span><span style=color:#569cd6>for</span><span>(;;);
+</span><span>}
+</span><span>
+</span></code></pre><p>So far so good. It works. But I want to also add a timer ticker task and several other goodies that might want to make use of the <code>&device</code>, so I need a mutex for my structure and a render task that gets woken up via an event queue of some sort. I want some minimal task sync manipulation code to make sure everything works as I expect it to work.<h2 id=the-same-but-async-ed>The same, but async'ed</h2><pre class=language-c data-lang=c style=background:#1e1e1e;color:#dcdcdc><code class=language-c data-lang=c><span style=color:#608b4e>// headers and defines
+</span><span>
+</span><span style=color:#569cd6>typedef struct </span><span>{
+</span><span>    </span><span style=color:#569cd6>char</span><span> digits[</span><span style=color:#b5cea8>9</span><span>];
+</span><span>    max7219_t</span><span style=color:#569cd6>*</span><span> display;
+</span><span>    SemaphoreHandle_t mutex;
+</span><span>} </span><span style=color:#4ec9b0>minuteman_t</span><span>;
+</span><span>
+</span><span style=color:#569cd6>static</span><span> minuteman_t device;
+</span><span style=color:#569cd6>static</span><span> TaskHandle_t render_task = </span><span style=color:#569cd6>NULL</span><span>;
+</span><span>
+</span><span>esp_err_t render_display(minuteman_t</span><span style=color:#569cd6>* </span><span>dev){
+</span><span>    </span><span style=color:#569cd6>if </span><span>(xSemaphoreTake(dev->mutex, </span><span style=color:#b5cea8>0</span><span>) != pdTRUE){
+</span><span>        </span><span style=color:#569cd6>return</span><span> ESP_ERR_INVALID_STATE;
+</span><span>    }
+</span><span>    ESP_ERROR_CHECK(max7219_clear(dev->display));
+</span><span>    ESP_ERROR_CHECK(max7219_draw_text_7seg(dev->display, </span><span style=color:#b5cea8>0</span><span>, dev->digits));
+</span><span>    ESP_LOGI(</span><span style=color:#b5cea8>__FUNCTION__</span><span>, </span><span style=color:#d69d85>"Display updated"</span><span>);
+</span><span>    xSemaphoreGive(dev->mutex);
+</span><span>    </span><span style=color:#569cd6>return</span><span> ESP_OK;
+</span><span>}
+</span><span>
+</span><span style=color:#569cd6>void </span><span>minuteman_init(minuteman_t</span><span style=color:#569cd6>* </span><span>dev, max7219_t</span><span style=color:#569cd6>* </span><span>display){
+</span><span>    dev->display = display;
+</span><span>    sprintf(dev->digits, </span><span style=color:#d69d85>"00000000"</span><span>);
+</span><span>    dev->mutex = xSemaphoreCreateMutex();
+</span><span>}
+</span><span>
+</span><span style=color:#569cd6>static void </span><span>render_handler(</span><span style=color:#569cd6>void* </span><span>arg){
+</span><span>    ESP_LOGI(</span><span style=color:#b5cea8>__FUNCTION__</span><span>, </span><span style=color:#d69d85>"Render task started"</span><span>);
+</span><span>    </span><span style=color:#569cd6>while</span><span>(</span><span style=color:#b5cea8>1</span><span>){
+</span><span>        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+</span><span>        ESP_LOGI(</span><span style=color:#b5cea8>__FUNCTION__</span><span>, </span><span style=color:#d69d85>"Render task awoken"</span><span>);
+</span><span>        ESP_ERROR_CHECK(render_display(</span><span style=color:#569cd6>&</span><span>device));
+</span><span>    }
+</span><span>
+</span><span>}
+</span><span>
+</span><span style=color:#569cd6>void </span><span>encoder_handler(</span><span style=color:#569cd6>void *</span><span>arg)
+</span><span>{
+</span><span>    rotary_encoder_event_t e;
+</span><span>    int32_t val = </span><span style=color:#b5cea8>0</span><span>;
+</span><span>
+</span><span>    </span><span style=color:#569cd6>while </span><span>(</span><span style=color:#b5cea8>1</span><span>)
+</span><span>    {
+</span><span>        xQueueReceive(event_queue, </span><span style=color:#569cd6>&</span><span>e, portMAX_DELAY);
+</span><span>
+</span><span>        </span><span style=color:#569cd6>switch </span><span>(e.type)
+</span><span>        {
+</span><span>            </span><span style=color:#569cd6>case</span><span> RE_ET_BTN_PRESSED:
+</span><span>                </span><span style=color:#569cd6>break</span><span>;
+</span><span>            </span><span style=color:#569cd6>case</span><span> RE_ET_BTN_RELEASED:
+</span><span>                </span><span style=color:#569cd6>break</span><span>;
+</span><span>            </span><span style=color:#569cd6>case</span><span> RE_ET_BTN_CLICKED:
+</span><span>                </span><span style=color:#569cd6>break</span><span>;
+</span><span>            </span><span style=color:#569cd6>case</span><span> RE_ET_BTN_LONG_PRESSED:
+</span><span>                </span><span style=color:#569cd6>break</span><span>;
+</span><span>            </span><span style=color:#569cd6>case</span><span> RE_ET_CHANGED:
+</span><span>                val += e.diff;
+</span><span>                </span><span style=color:#569cd6>if</span><span>(xSemaphoreTake(device.mutex, </span><span style=color:#b5cea8>0</span><span>) == pdTRUE){
+</span><span>                    ESP_LOGI(</span><span style=color:#b5cea8>__FUNCTION__</span><span>, </span><span style=color:#d69d85>"Mutex aquired"</span><span>);
+</span><span>                    sprintf(device.digits, </span><span style=color:#d69d85>"</span><span style=color:#b4cea8>%08d</span><span style=color:#d69d85>"</span><span>, val);
+</span><span>                    xSemaphoreGive(device.mutex);
+</span><span>                }
+</span><span>                render_display(</span><span style=color:#569cd6>&</span><span>device);
+</span><span>                xTaskNotifyGive(</span><span style=color:#569cd6>&</span><span>render_task);
+</span><span>                </span><span style=color:#569cd6>break</span><span>;
+</span><span>            </span><span style=color:#569cd6>default</span><span>:
+</span><span>                </span><span style=color:#569cd6>break</span><span>;
+</span><span>        }
+</span><span>    }
+</span><span>}
+</span><span>
+</span><span style=color:#569cd6>void </span><span>app_main(</span><span style=color:#569cd6>void</span><span>)
+</span><span>{
+</span><span>    ESP_ERROR_CHECK(nvs_flash_init()); 
+</span><span>    display_init(</span><span style=color:#569cd6>&</span><span>display);
+</span><span>    encoder_init(</span><span style=color:#569cd6>&</span><span>encoder);
+</span><span>    minuteman_init(</span><span style=color:#569cd6>&</span><span>device, </span><span style=color:#569cd6>&</span><span>display);
+</span><span>    xTaskCreate(</span><span style=color:#569cd6>&</span><span>render_handler, </span><span style=color:#d69d85>"render task"</span><span>, configMINIMAL_STACK_SIZE </span><span style=color:#569cd6>* </span><span style=color:#b5cea8>8</span><span>, </span><span style=color:#569cd6>NULL</span><span>, </span><span style=color:#b5cea8>5</span><span>, </span><span style=color:#569cd6>&</span><span>render_task);
+</span><span>    xTaskCreate(</span><span style=color:#569cd6>&</span><span>encoder_handler, </span><span style=color:#d69d85>"encoder task"</span><span>, configMINIMAL_STACK_SIZE </span><span style=color:#569cd6>* </span><span style=color:#b5cea8>8</span><span>, </span><span style=color:#569cd6>NULL</span><span>, </span><span style=color:#b5cea8>5</span><span>, </span><span style=color:#569cd6>NULL</span><span>);
+</span><span>    vTaskDelay(pdMS_TO_TICKS(</span><span style=color:#b5cea8>30000</span><span>));
+</span><span>    </span><span style=color:#569cd6>for</span><span>(;;);
+</span><span>}
+</span></code></pre><p>So, nothing coredumped, no stack corruption errors. We get the following logs:<pre style=background:#1e1e1e;color:#dcdcdc><code><span>I (3791) encoder: Added rotary encoder 0, A: 34, B: 35, BTN: 32
+</span><span>I (3801) render_handler: Render task started
+</span><span>I (12391) encoder_handler: Mutex aquired
+</span></code></pre><p>Which means that at the very least, the mutex code works as intended, but something funky is happening with <code>xTaskNotifyGive</code>, <code>ulTaskNotifyTake</code> or both. I'm going to try to chronologically set out my thought process:<ol><li><p>Maybe the tasks weren't started in the correct order and are deadlocked? Nope, changing the order doesn't work.</p><li><p>Perhaps the tasks don't live long enough because they are not static? Which would be weird as we didn't core dumped. Also no.</p><li><p>Maybe something to do with the scheduler? In some examples the scheduler seems to be explicitly started, so maybe that is it. Ok, something changed, now we are getting actually core dumped. Is this a good thing? Maybe the error is somewhere else? I check the earlier startup logs:</p></ol><pre style=background:#1e1e1e;color:#dcdcdc><code><span>I (481) cpu_start: Starting scheduler on PRO CPU.
+</span></code></pre><p>I search for this string on the esp-idf source tree and sure enough, <a href=https://github.com/espressif/esp-idf/blob/release/v4.2/components/esp32/cpu_start.c#L500>the scheduler is being started</a>, so I don't think I have to call it twice.<ol start=4><li><p>Also, the call to <code>vTaskDelay</code> I copy pasted from an example doesn't make a lot of sense to me, so I'm removing it.</p><li><p>Maybe both tasks need to be created on the same core to enable inter-task communication? I change <code>xTaskCreate</code> into <code>xTaskCreatePinnedToCore</code>. No avail.</p><li><p>Maybe the task communication functions I used weren't the appropiate ones? Many applications within the esp-idf use <a href=https://www.freertos.org/xTaskNotifyWait.html>xTaskNotifyWait()</a> and <a href=https://www.freertos.org/ulTaskNotifyTake.html>ulTaskNotifyTake()</a>. No dice.</p><li><p>Check if the flag <code>configUSE_TASK_NOTIFICATIONS</code> is set. The same for <code>configTASK_NOTIFICATION_ARRAY_ENTRIES</code>.</p><li><p>Finally, after taking a long walk and staring blankly into the screen for a while, I realized my mistake:</p></ol><pre class=language-c data-lang=c style=background:#1e1e1e;color:#dcdcdc><code class=language-c data-lang=c><span style=color:#608b4e>// My declaration
+</span><span style=color:#569cd6>static</span><span> TaskHandle_t render_task = </span><span style=color:#569cd6>NULL</span><span>;
+</span><span>
+</span><span style=color:#608b4e>// My function call
+</span><span>xTaskNotifyGive(</span><span style=color:#569cd6>&</span><span>render_task);
+</span><span>
+</span><span style=color:#608b4e>// Which in turn expands into 
+</span><span>xTaskNotify((</span><span style=color:#569cd6>&</span><span>render_task), </span><span style=color:#b5cea8>0</span><span>, eIncrement);
+</span><span>
+</span><span style=color:#608b4e>// The function signature of xTaskNotify:
+</span><span>BaseType_t xTaskNotify(TaskHandle_t xTaskToNotify, uint32_t ulValue, eNotifyAction eAction);
+</span></code></pre><p>¿Do you see it yet?<p>Let's go deeper:<pre class=language-c data-lang=c style=background:#1e1e1e;color:#dcdcdc><code class=language-c data-lang=c><span style=color:#608b4e>// What does TaskHandle_t expand to?
+</span><span style=color:#569cd6>typedef void * </span><span style=color:#4ec9b0>TaskHandle_t</span><span>;
+</span></code></pre><p>So, in short: I was passing <code>void**</code> into a function that expects <code>void*</code>.<pre class=language-c data-lang=c style=background:#1e1e1e;color:#dcdcdc><code class=language-c data-lang=c><span style=color:#608b4e>// Now everything is working dandy.
+</span><span>xTaskNotifyGive(render_task);
+</span></code></pre><pre style=background:#1e1e1e;color:#dcdcdc><code><span>I (1689862) render_handler: Render task awoken
+</span><span>I (1689862) render_display: Display updated
+</span><span>
+</span></code></pre><p>And that was it.<p>Don't you <em>just</em> love uncaught typing errors?<div class=center-column style=text-align:center><a class=center-column href=https://ccarral.github.io/en/projects/>[back]</a></div></article><script>$("img").wrap("<div id='post-img-container'></div>")</script></div>
