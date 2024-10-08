@@ -12,5 +12,6 @@ and other stuff.
 Computer engineer (UAEMex, class of 23).
 
 
-I dedicate my time to programming, reading and watching movies from time to time.
-Into kernel development and low level stuff.
+I dedicate my time to programming, reading and watching movies from time to time. 
+
+Currently doing Infra @ Oracle.
