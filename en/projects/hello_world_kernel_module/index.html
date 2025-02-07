@@ -1,0 +1,79 @@
+<!doctype html><html><head><title>
+        Writing a simple linux kernel module with rust from the ground up
+    </title><link href=https://ccarral.github.io/favicon.ico rel=icon type=image/png><link href=https://ccarral.github.io/main.css media=screen rel=stylesheet><script src=https://code.jquery.com/jquery-3.5.0.js></script><script async data-goatcounter=https://cosmiccube.goatcounter.com/count src=//gc.zgo.at/count.js></script><meta charset=UTF-8><meta content="IE=edge" http-equiv=X-UA-Compatible><meta content="width=device-width,initial-scale=1.0" name=viewport><meta name=description><meta content=https://ccarral.github.io/projects/hello_world_kernel_module/dmesg_cap_es.png name=image><meta content="Writing a simple linux kernel module with rust from the ground up" name=twitter:title><meta name=twitter:description><meta content=summary_large_image name=twitter:card><meta content=https://ccarral.github.io/projects/hello_world_kernel_module/dmesg_cap_es.png name=twitter:image><meta content=https://ccarral.github.io name=twitter:url><meta content=@0xC4C4 name=twitter:site><meta content=article property=og:type><meta content="Writing a simple linux kernel module with rust from the ground up" property=og:title><meta property=og:description><meta content=https://ccarral.github.io/projects/hello_world_kernel_module/dmesg_cap_es.png property=og:image><meta content=https://ccarral.github.io property=og:url><meta content="Writing a simple linux kernel module with rust from the ground up" property=og:site_name><meta itemprop=name><meta itemprop=description><meta content=https://ccarral.github.io/projects/hello_world_kernel_module/dmesg_cap_es.png itemprop=image><body class=background><div class=content><div class=center-column style=text-align:center><div class=center-column id=nav-container><a class=nav-element href=https://ccarral.github.io/en/>home</a> | <a class=nav-element href=https://ccarral.github.io/en/projects/>projects</a> | <a class=nav-accent href=https://ccarral.github.io/>es </a></div></div><article class="center-column content" id=post><h1 class=main-title>Writing a simple linux kernel module with rust from the ground up</h1><p id=date>2021-04-27<p>Historically, if we wanted to write a kernel module, our only choice was to deal with the C libraries the kernel provides for such things. However, a recent <a href=https://lkml.org/lkml/2021/4/14/1023>RFC</a> adds limited support for rust as an alternative.<h2 id=setting-up-the-toolchain>Setting up the toolchain</h2><p>If you have a rust toolchain installed on your machine, then you probably also have the <a href=https://llvm.org/>llvm toolchain</a> and <a href=https://rustup.rs/>rustup</a> installed, so I won't get into that.<p>Then, we need the actual <a href=https://github.com/Rust-for-Linux/linux>rust-for-linux</a> kernel tree. It is a lengthy download over ssh so I recommend downloading as a zip. We will unzip it in our directory of choice. The next step is configuring our build for rust support. The process is documented throughly in <code>Documentation/rust/quick-start.rst</code> The next step is to build the kernel.<pre class=language-bash data-lang=bash style=background:#1e1e1e;color:#dcdcdc><code class=language-bash data-lang=bash><span>$ make LLVM=1 -j $(nproc)
+</span></code></pre><p>As of the day this post was written, nightly rust is needed for building. We also need the standard library for compiling <code>core</code> and <code>alloc</code>.<pre class=language-bash data-lang=bash style=background:#1e1e1e;color:#dcdcdc><code class=language-bash data-lang=bash><span>$ rustup default nightly-2021-02-20
+</span><span>$ rustup component add rust-src
+</span></code></pre><h2 id=writing-the-code>Writing the code</h2><p>The rust-for-linux project provides a standard toolset for writing a kernel module. If you are familiar with the <code>hello world</code> module described in the book <em>Linux Device Drivers</em> (which if you haven't read, you should probably check out before proceeding) then this will look familiar.<p>First, for the <code>hello_world.rs</code> file:<pre class=language-rust data-lang=rust style=background:#1e1e1e;color:#dcdcdc><code class=language-rust data-lang=rust><span style=color:#608b4e>//! Hello world kernel module.
+</span><span>
+</span><span>#![no_std]
+</span><span>#![feature(allocator_api, global_asm)]
+</span><span>
+</span><span style=color:#569cd6>use </span><span>kernel::prelude::*;
+</span><span>
+</span><span>module! {
+</span><span>    </span><span style=color:#569cd6>type</span><span>: HelloWorld,
+</span><span>    name: </span><span style=color:#569cd6>b</span><span style=color:#d69d85>"hello_world"</span><span>,
+</span><span>    author: </span><span style=color:#569cd6>b</span><span style=color:#d69d85>"Carlos Carral"</span><span>,
+</span><span>    description: </span><span style=color:#569cd6>b</span><span style=color:#d69d85>"Hello world kernel module"</span><span>,
+</span><span>    license: </span><span style=color:#569cd6>b</span><span style=color:#d69d85>"GPL v2"</span><span>,
+</span><span>    params: {
+</span><span>    },
+</span><span>}
+</span><span>
+</span><span style=color:#569cd6>struct </span><span>HelloWorld;
+</span><span>
+</span><span style=color:#569cd6>impl </span><span>KernelModule </span><span style=color:#569cd6>for </span><span>HelloWorld {
+</span><span>    </span><span style=color:#569cd6>fn </span><span>init() -> KernelResult<</span><span style=color:#569cd6>Self</span><span>> {
+</span><span>        pr_info!(</span><span style=color:#d69d85>"Hello world, from the kernel!</span><span style=color:#e3bbab>\n</span><span style=color:#d69d85>"</span><span>);
+</span><span>
+</span><span>        Ok(HelloWorld {})
+</span><span>    }
+</span><span>}
+</span><span>
+</span><span style=color:#569cd6>impl </span><span>Drop </span><span style=color:#569cd6>for </span><span>HelloWorld {
+</span><span>    </span><span style=color:#569cd6>fn </span><span>drop(</span><span style=color:#569cd6>&mut </span><span>self) {
+</span><span>        pr_info!(</span><span style=color:#d69d85>"Goodbye!</span><span style=color:#e3bbab>\n</span><span style=color:#d69d85>"</span><span>);
+</span><span>    }
+</span><span>}
+</span></code></pre><p>So far so good. This is almost the exact same source code as the one in <code>samples/rust/rust_minimal.rs</code>.<p>Next comes the makefile.<pre class=language-Makefile data-lang=Makefile style=background:#1e1e1e;color:#dcdcdc><code class=language-Makefile data-lang=Makefile><span>obj-m += </span><span style=background:#282828;color:#d69d85>hello_world.o</span><span>
+</span><span>
+</span><span style=color:#608b4e># Simply expanded variable ":="
+</span><span>KERNELDIR :=</span><span style=background:#282828;color:#d69d85>/path/to/rust-for-linux/linux</span><span>
+</span><span>
+</span><span style=color:#608b4e># Shell command expands to current working directory
+</span><span>PWD := </span><span style=background:#282828;color:#569cd6>$(</span><span style=background:#282828;color:#dcdcdc>shell pwd</span><span style=background:#282828;color:#569cd6>)</span><span>
+</span><span>
+</span><span>all: 
+</span><span>	</span><span style=color:#569cd6>$(</span><span>MAKE</span><span style=color:#569cd6>) </span><span>-C </span><span style=color:#569cd6>$(</span><span>KERNELDIR</span><span style=color:#569cd6>)</span><span> M=</span><span style=color:#569cd6>$(</span><span>PWD</span><span style=color:#569cd6>)</span><span> modules
+</span><span>
+</span><span>clean:  
+</span><span>	rm -rf </span><span style=color:#569cd6>*</span><span>.o </span><span style=color:#569cd6>*</span><span>~ core .depend </span><span style=color:#569cd6>*</span><span>.mod.o .</span><span style=color:#569cd6>*</span><span>.cmd </span><span style=color:#569cd6>*</span><span>.ko </span><span style=color:#569cd6>*</span><span>.mod.c </span><span style=color:#569cd6>*</span><span>.mod
+</span><span>	rm -rf </span><span style=color:#569cd6>*</span><span>.tmp_versions </span><span style=color:#569cd6>*</span><span>.markers .</span><span style=color:#569cd6>*</span><span>.symvers modules.order
+</span><span>	rm -rf Module.symvers
+</span><span>	rm -rf </span><span style=color:#569cd6>*</span><span>.rmeta 
+</span><span>
+</span></code></pre><p>We run <code>make</code> on our current working directory and if all went well, then the output of <code>ls</code> should look something like this.<pre class=language-bash data-lang=bash style=background:#1e1e1e;color:#dcdcdc><code class=language-bash data-lang=bash><span>$ make LLVM=1
+</span><span>$ ls -1
+</span><span>hello_world.ko
+</span><span>hello_world.mod
+</span><span>hello_world.mod.c
+</span><span>hello_world.mod.o
+</span><span>hello_world.o
+</span><span>hello_world.rs
+</span><span>libhello_world.rmeta
+</span><span>Makefile
+</span><span>modules.order
+</span><span>Module.symvers
+</span></code></pre><p>Great! Now what?<p>Lets see what information we can get out of <code>hello_world.ko</code><pre class=language-bash data-lang=bash style=background:#1e1e1e;color:#dcdcdc><code class=language-bash data-lang=bash><span>$ modinfo hello_world.ko
+</span><span>
+</span><span>filename:       /home/carlos-II/Proyectos/rust/hello-world-kmod/hello_world.ko
+</span><span>author:         Carlos Carral
+</span><span>description:    Hello world kernel module
+</span><span>license:        GPL v2
+</span><span>depends:        
+</span><span>retpoline:      Y
+</span><span>name:           hello_world
+</span><span>vermagic:       5.12.0-rc4rust1 SMP mod_unload 
+</span></code></pre><p>All seems well. Now let's try to actually load it. You can install the kernel image into your system with <code>make install</code> or you can use some sort of virtual machine to load it. For this tutorial I used <a href=https://github.com/vincentbernat/eudyptula-boot>eudyptula-boot</a>.<h2 id=loading-our-module>Loading our module</h2><pre class=language-bash data-lang=bash style=background:#1e1e1e;color:#dcdcdc><code class=language-bash data-lang=bash><span>$ insmod hello_world.ko 
+</span></code></pre><p>An we unload it with <code>rmmod</code><pre class=language-bash data-lang=bash style=background:#1e1e1e;color:#dcdcdc><code class=language-bash data-lang=bash><span>$ rmmod hello_world
+</span></code></pre><p>Now, when we run <code>dmesg</code>, we can actually see how our module was loaded into the kernel and then unloaded.<p><img alt=dmesg src=https://ccarral.github.io/en/projects/hello_world_kernel_module/dmesg_cap.png><p>An this is how we compile and load a rust kernel module.<div class=center-column style=text-align:center><a class=center-column href=https://ccarral.github.io/en/projects/>[back]</a></div></article><script>$("img").wrap("<div id='post-img-container'></div>")</script></div>
